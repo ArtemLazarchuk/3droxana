@@ -11,6 +11,8 @@ from bson import ObjectId
 from dotenv import load_dotenv
 from together import Together
 
+from assistant_core.link_indexing import build_rag_context
+
 
 class ChatSessionNotFound(Exception):
     """Сесію з таким id не знайдено."""
@@ -77,19 +79,6 @@ def _chat_messages(user_message: str, context: str) -> List[Dict[str, str]]:
 
 def _sse_event(obj: Dict[str, Any]) -> bytes:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n".encode("utf-8")
-
-
-async def build_links_context(db) -> str:
-    """Збирає контекст із колекції links."""
-    links = await db["links"].find().to_list(None)
-    return "\n\n".join(
-        f"{i + 1}) Назва: {link['title']}\n"
-        f"Опис: {link['description']}\n"
-        f"Теги: {', '.join(link['tags'])}\n"
-        f"Посилання: {link['url']}"
-        for i, link in enumerate(links)
-        if link.get("visible")
-    )
 
 
 async def generate_model_answer(message: str, context: str) -> str:
@@ -276,7 +265,7 @@ async def stream_chat_events(
     await append_user_message(db, session_id, cleaned)
     yield _sse_event({"type": "status", "phase": "thinking"})
 
-    context = await build_links_context(db)
+    context = await build_rag_context(db, cleaned)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     thread = threading.Thread(
@@ -328,7 +317,7 @@ async def process_chat(db, message: str, session_id: str) -> Dict[str, str]:
     """
 
     cleaned_message = message.strip()
-    context = await build_links_context(db)
+    context = await build_rag_context(db, cleaned_message)
     answer = await generate_model_answer(cleaned_message, context)
     parsed = parse_answer(answer)
 
