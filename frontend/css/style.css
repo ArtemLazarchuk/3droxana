@@ -148,6 +148,56 @@ body {
   word-break: break-all;
 }
 
+/* Індикатор «думає» + потокове повідомлення */
+.message.bot.assistant-thinking .thinking-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+.message.bot.assistant-thinking .thinking-dots {
+  display: inline-block;
+  min-width: 1.25em;
+  letter-spacing: 2px;
+  animation: thinkingPulse 1s ease-in-out infinite;
+}
+@keyframes thinkingPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+.message.bot.assistant-thinking .thinking-dots::after {
+  content: "...";
+}
+/* Під час стріму: без pre-wrap (інакше + <p> від Markdown дають величезні проміжки) */
+.message.bot.assistant-streaming .streaming-body.markdown-body {
+  white-space: normal;
+  color: var(--text-primary);
+  line-height: 1.38;
+  opacity: 0.95;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body p {
+  margin: 0.1em 0;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body p:first-child {
+  margin-top: 0;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body ul,
+.message.bot.assistant-streaming .streaming-body.markdown-body ol {
+  margin: 0.2em 0;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body li {
+  margin: 0.08em 0;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body h1,
+.message.bot.assistant-streaming .streaming-body.markdown-body h2,
+.message.bot.assistant-streaming .streaming-body.markdown-body h3 {
+  margin: 0.35em 0 0.15em;
+}
+
 /* === 5. ВВІД === */
 .input-area {
   position: absolute;

@@ -34,6 +34,45 @@ window.addEventListener("DOMContentLoaded", async () => {
         return wrap.innerHTML;
     }
 
+    /** Під час стріму показуємо лише тіло після «основний текст:», без службових полів. */
+    function extractMainStreamPreview(full) {
+        const raw = full == null ? "" : String(full);
+        const m = raw.match(/основний\s*текст\s*:\s*(.*)/is);
+        if (!m) return null;
+        let body = m[1];
+        body = body.split(/\n\s*емоція\s*:/i)[0];
+        body = body.split(/\n\s*посилання\s*:/i)[0];
+        body = body.split(/\n\s*текст\s*чату\s*:/i)[0];
+        return body;
+    }
+
+    async function consumeSseStream(response, onEvent) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let sep;
+            while ((sep = buffer.indexOf("\n\n")) !== -1) {
+                const block = buffer.slice(0, sep).trim();
+                buffer = buffer.slice(sep + 2);
+                for (const line of block.split("\n")) {
+                    const t = line.trim();
+                    if (!t.startsWith("data:")) continue;
+                    const jsonStr = t.slice(5).trim();
+                    if (jsonStr === "[DONE]") continue;
+                    try {
+                        onEvent(JSON.parse(jsonStr));
+                    } catch (err) {
+                        console.warn("SSE parse", err, jsonStr);
+                    }
+                }
+            }
+        }
+    }
+
     // Елементи DOM
     const sidebar = document.getElementById("sidebar");
     const mainContent = document.getElementById("main-content");
@@ -45,6 +84,47 @@ window.addEventListener("DOMContentLoaded", async () => {
     const emotionLabel = document.getElementById("emotion-status");
     const newChatBtn = document.getElementById("new-chat-btn");
     const avatarBox = document.querySelector('.avatar-fixed'); // Блок для підсвітки
+
+    function applyAvatarEmotion(data) {
+        if (avatarBox) {
+            avatarBox.classList.add("active-glow");
+            setTimeout(() => avatarBox.classList.remove("active-glow"), 3000);
+        }
+        if (data.emotion && avatarVideo) {
+            const videoMap = {
+                neutral: "speak_blink.mp4",
+                happy: "happy.mp4",
+                sad: "sad.mp4",
+                surprise: "surprize1.mp4",
+                thinking: "squinted1.mp4",
+                "😊": "happy.mp4",
+                "😄": "speak_blink.mp4",
+                "😲": "surprize1.mp4",
+                "🤔": "squinted1.mp4",
+                "😍": "happy.mp4",
+            };
+            const key = String(data.emotion).trim();
+            const filename =
+                videoMap[key] || videoMap[key.toLowerCase()] || "speak_blink.mp4";
+            const sourceElement = avatarVideo.querySelector("source");
+            if (sourceElement && !sourceElement.src.includes(filename)) {
+                sourceElement.src = `/avatar/animations/${filename}`;
+                avatarVideo.load();
+                avatarVideo.play().catch((e) => console.log("Помилка відео:", e));
+                if (emotionLabel) emotionLabel.textContent = data.emotion;
+            }
+        }
+    }
+
+    function createThinkingBubble() {
+        const wrap = document.createElement("div");
+        wrap.className = "message bot assistant-thinking";
+        wrap.innerHTML =
+            '<div class="thinking-inner"><span class="thinking-label">Асистент думає</span><span class="thinking-dots"></span></div>';
+        messagesContainer.appendChild(wrap);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return wrap;
+    }
 
     const user = JSON.parse(localStorage.getItem("user"));
     const userId = user?._id?.$oid || user?._id || null;
@@ -154,7 +234,10 @@ window.addEventListener("DOMContentLoaded", async () => {
                 if (sessionData.messages && sessionData.messages.length > 0) {
                     sessionData.messages.forEach(renderHistoryMessage);
                 } else {
-                    appendMessage("bot", `Привіт, ${user.username || 'студенте'}! Чим можу допомогти? 👋`);
+                    appendMessage(
+                        "bot",
+                        `Привіт, ${user.username || "студенте"}! Чим можу допомогти?`
+                    );
                 }
             }
         } catch (e) { 
@@ -163,61 +246,113 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ВІДПРАВКА ПОВІДОМЛЕННЯ
+    // ВІДПРАВКА ПОВІДОМЛЕННЯ (SSE-потік)
+    let chatInFlight = false;
+
     async function sendMessage() {
         const text = userInput.value.trim();
         const sessionId = localStorage.getItem("sessionId");
-        if (!text || !sessionId) return;
+        if (!text || !sessionId || chatInFlight) return;
 
         appendMessage("user", text);
         userInput.value = "";
-        
+        chatInFlight = true;
+        if (sendBtn) sendBtn.disabled = true;
+        if (userInput) userInput.disabled = true;
+
+        const thinkingEl = createThinkingBubble();
+        let streamBubble = null;
+        let streamBody = null;
+        let accumulated = "";
+
+        const cleanupThinking = () => {
+            thinkingEl?.remove();
+        };
+
+        const ensureStreamBubble = () => {
+            cleanupThinking();
+            if (streamBubble) return;
+            streamBubble = document.createElement("div");
+            streamBubble.className = "message bot assistant-streaming";
+            streamBody = document.createElement("div");
+            streamBody.className = "streaming-body markdown-body";
+            streamBody.innerHTML = "";
+            streamBubble.appendChild(streamBody);
+            messagesContainer.appendChild(streamBubble);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        };
+
         try {
-            const res = await fetch(`${API_BASE_URL}/faq/chat`, {
+            const res = await fetch(`${API_BASE_URL}/faq/chat/stream`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "text/event-stream",
+                },
                 body: JSON.stringify({ message: text, sessionId, userId }),
             });
-            const data = await res.json();
-            
-            appendAssistantMessage({
-                text: data.response,
-                link: data.link || "",
-            });
 
-            // ПІДСВІТКА АВАТАРА
-            if (avatarBox) {
-                avatarBox.classList.add('active-glow');
-                setTimeout(() => avatarBox.classList.remove('active-glow'), 3000);
+            if (!res.ok) {
+                cleanupThinking();
+                appendMessage(
+                    "bot",
+                    `Помилка сервера (${res.status}). Спробуйте ще раз.`
+                );
+                return;
             }
 
-            // Оновлення емоції (англ. мітки + сумісність зі старими емодзі)
-            if (data.emotion && avatarVideo) {
-                const videoMap = {
-                    neutral: "speak_blink.mp4",
-                    happy: "happy.mp4",
-                    sad: "sad.mp4",
-                    surprise: "surprize1.mp4",
-                    thinking: "squinted1.mp4",
-                    "😊": "happy.mp4",
-                    "😄": "speak_blink.mp4",
-                    "😲": "surprize1.mp4",
-                    "🤔": "squinted1.mp4",
-                    "😍": "happy.mp4",
-                };
-                const key = String(data.emotion).trim();
-                const filename = videoMap[key] || videoMap[key.toLowerCase()] || "speak_blink.mp4";
-                const sourceElement = avatarVideo.querySelector("source");
-                if (sourceElement && !sourceElement.src.includes(filename)) {
-                    sourceElement.src = `/avatar/animations/${filename}`;
-                    avatarVideo.load();
-                    avatarVideo.play().catch(e => console.log("Помилка відео:", e));
-                    if (emotionLabel) emotionLabel.textContent = data.emotion;
+            await consumeSseStream(res, (ev) => {
+                if (ev.type === "status" && ev.phase === "thinking") {
+                    if (emotionLabel) emotionLabel.textContent = "думає…";
+                    return;
                 }
-            }
-        } catch (e) { 
+                if (ev.type === "delta" && ev.content) {
+                    accumulated += ev.content;
+                    ensureStreamBubble();
+                    const preview = extractMainStreamPreview(accumulated);
+                    if (streamBody) {
+                        if (preview == null) {
+                            streamBody.textContent = "…";
+                        } else {
+                            streamBody.innerHTML =
+                                renderMarkdownToHtml(preview);
+                        }
+                    }
+                    messagesContainer.scrollTop =
+                        messagesContainer.scrollHeight;
+                }
+                if (ev.type === "done") {
+                    cleanupThinking();
+                    streamBubble?.remove();
+                    streamBubble = null;
+                    streamBody = null;
+                    appendAssistantMessage({
+                        text: ev.response || "",
+                        link: ev.link || "",
+                    });
+                    applyAvatarEmotion(ev);
+                }
+                if (ev.type === "error") {
+                    streamBubble?.remove();
+                    cleanupThinking();
+                    appendMessage(
+                        "bot",
+                        ev.detail || "Помилка під час відповіді асистента."
+                    );
+                }
+            });
+        } catch (e) {
             console.error("Помилка відправки", e);
-            appendMessage("bot", "Помилка відправки."); 
+            streamBubble?.remove();
+            cleanupThinking();
+            appendMessage("bot", "Помилка відправки.");
+        } finally {
+            chatInFlight = false;
+            if (sendBtn) sendBtn.disabled = false;
+            if (userInput) userInput.disabled = false;
+            if (emotionLabel && emotionLabel.textContent === "думає…") {
+                emotionLabel.textContent = "Очікування";
+            }
         }
     }
 

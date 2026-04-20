@@ -1,7 +1,15 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from assistant_core.chat import ChatServiceError, ChatSessionNotFound, process_chat
+from assistant_core.chat import (
+    ChatServiceError,
+    ChatSessionNotFound,
+    process_chat,
+    stream_chat_events,
+)
 from ..db.mongodb import get_database
 from ..models import faq as faq_model
 from ..schemas import faq as faq_schema
@@ -58,5 +66,36 @@ async def chat_with_faq(request: ChatRequest, db=Depends(get_database)):
         link=result["link"],
         emotion=result["emotion"],
         title=result["title"],
+    )
+
+
+@router.post("/chat/stream")
+async def chat_with_faq_stream(request: ChatRequest, db=Depends(get_database)):
+    """Потокова відповідь (SSE): status → delta → done | error."""
+
+    async def event_iter():
+        try:
+            async for chunk in stream_chat_events(
+                db, request.sessionId, request.message
+            ):
+                yield chunk
+        except ChatSessionNotFound:
+            yield (
+                "data: "
+                + json.dumps(
+                    {"type": "error", "detail": "Сесія не знайдена"},
+                    ensure_ascii=False,
+                )
+                + "\n\n"
+            ).encode("utf-8")
+
+    return StreamingResponse(
+        event_iter(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
