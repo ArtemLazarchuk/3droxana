@@ -15,16 +15,60 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    /** Чи схожий фрагмент на LaTeX (щоб не чіпати звичайні квадратні дужки). Потрібен хоча б один \\команда. */
+    function looksLikeLatexFragment(t) {
+        const s = (t || "").trim();
+        if (!s || s.length > 800) return false;
+        return /\\[a-zA-Z]+/.test(s);
+    }
+
+    /**
+     * Моделі часто дають блоки виду "[\\n I=\\\\frac{q}{t} \\n]" без зворотного сліша —
+     * KaTeX чекає $$ або \\[. Перетворюємо такі блоки на $$...$$.
+     */
+    function normalizeMathMarkdown(text) {
+        let s = text == null ? "" : String(text);
+        s = s.replace(/(^|\n)\[\s*\n([\s\S]*?)\n\]\s*(?=\n|$)/g, (full, before, inner) => {
+            const t = inner.trim();
+            if (looksLikeLatexFragment(t)) {
+                const one = t.replace(/\s+/g, " ").trim();
+                return `${before}$$${one}$$`;
+            }
+            return full;
+        });
+        /* Один рядок: і після початку рядка, і посеред речення (напр. «часу: [ I = \\frac{q}{t} ]»). */
+        s = s.replace(/(?<!\!)\[\s*([^\]\n]+?)\s*\]/g, (full, inner) => {
+            const t = inner.trim();
+            if (!looksLikeLatexFragment(t)) return full;
+            const one = t.replace(/\s+/g, " ").trim();
+            return `$$${one}$$`;
+        });
+        /*
+         * marked + breaks:true перетворює переноси всередині абзацу на <br>.
+         * Тоді $$ … $$ опиняються в різних текстових вузлах з <br> між ними — KaTeX auto-render не знаходить пару delimiter'ів.
+         * Якщо немає LaTeX-розриву рядка (\\\\) — зливаємо вміст $$ у один рядок.
+         */
+        s = s.replace(/\$\$([\s\S]*?)\$\$/g, (full, inner) => {
+            const core = inner.trim();
+            if (!core) return full;
+            if (/\\\\/.test(core)) {
+                return `$$${core}$$`;
+            }
+            return `$$${core.replace(/\s+/g, " ").trim()}$$`;
+        });
+        return s;
+    }
+
     /** Markdown → безпечний HTML (якщо CDN недоступні — екранування). */
     function renderMarkdownToHtml(md) {
-        const raw = md == null ? "" : String(md);
+        const raw = normalizeMathMarkdown(md == null ? "" : String(md));
         if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
             const d = document.createElement("div");
             d.textContent = raw;
             return d.innerHTML.replace(/\n/g, "<br>");
         }
         const html = marked.parse(raw, { breaks: true, gfm: true });
-        let clean = DOMPurify.sanitize(html);
+        let clean = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
         clean = clean.replace(/<p>\s*<\/p>/gi, "");
         clean = clean.replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "");
         const wrap = document.createElement("div");
@@ -34,6 +78,51 @@ window.addEventListener("DOMContentLoaded", async () => {
             a.setAttribute("rel", "noopener noreferrer");
         });
         return wrap.innerHTML;
+    }
+
+    let streamMathTimer = null;
+
+    function flushStreamingMathTimer() {
+        if (streamMathTimer != null) {
+            clearTimeout(streamMathTimer);
+            streamMathTimer = null;
+        }
+    }
+
+    /** LaTeX у Markdown: \\(…\\) у рядку, $$…$$ або \\[…\\] блочно (одинарний $ не використовуємо — зламає гривні тощо). */
+    function enhanceMath(root) {
+        if (!root || !root.isConnected) return;
+        if (typeof renderMathInElement !== "function" || typeof katex === "undefined") {
+            return;
+        }
+        try {
+            renderMathInElement(root, {
+                delimiters: [
+                    { left: "$$", right: "$$", display: true },
+                    { left: "\\(", right: "\\)", display: false },
+                    { left: "\\[", right: "\\]", display: true },
+                ],
+                ignoredClasses: ["katex", "katex-display", "katex-html"],
+                throwOnError: false,
+            });
+        } catch (err) {
+            console.warn("KaTeX", err);
+        }
+    }
+
+    function setMarkdownHtml(el, md) {
+        flushStreamingMathTimer();
+        el.innerHTML = renderMarkdownToHtml(md);
+        enhanceMath(el);
+    }
+
+    function setStreamingMarkdownHtml(el, md) {
+        el.innerHTML = renderMarkdownToHtml(md);
+        flushStreamingMathTimer();
+        streamMathTimer = setTimeout(() => {
+            streamMathTimer = null;
+            enhanceMath(el);
+        }, 450);
     }
 
     /** Під час стріму показуємо лише тіло після «основний текст:», без службових полів. */
@@ -151,7 +240,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         } else {
             const inner = document.createElement("div");
             inner.className = "markdown-body bot-message-body";
-            inner.innerHTML = renderMarkdownToHtml(text);
+            setMarkdownHtml(inner, text);
             msgDiv.appendChild(inner);
         }
         messagesContainer.appendChild(msgDiv);
@@ -179,7 +268,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         const body = document.createElement("div");
         body.className = "bot-message-body markdown-body";
-        body.innerHTML = renderMarkdownToHtml(msg.text || "");
+        setMarkdownHtml(body, msg.text || "");
         wrap.appendChild(body);
 
         const linkVal = (msg.link || "").trim();
@@ -299,6 +388,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         const sessionId = localStorage.getItem("sessionId");
         if (!text || !sessionId || chatInFlight) return;
 
+        flushStreamingMathTimer();
         appendMessage("user", text);
         userInput.value = "";
         chatInFlight = true;
@@ -357,10 +447,10 @@ window.addEventListener("DOMContentLoaded", async () => {
                     const preview = extractMainStreamPreview(accumulated);
                     if (streamBody) {
                         if (preview == null) {
+                            flushStreamingMathTimer();
                             streamBody.textContent = "…";
                         } else {
-                            streamBody.innerHTML =
-                                renderMarkdownToHtml(preview);
+                            setStreamingMarkdownHtml(streamBody, preview);
                         }
                     }
                     messagesContainer.scrollTop =
@@ -368,6 +458,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                 }
                 if (ev.type === "done") {
                     cleanupThinking();
+                    flushStreamingMathTimer();
                     streamBubble?.remove();
                     streamBubble = null;
                     streamBody = null;
