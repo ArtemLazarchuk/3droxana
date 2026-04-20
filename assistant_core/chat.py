@@ -3,7 +3,7 @@ import os
 import re
 import traceback
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, FrozenSet
 
 from bson import ObjectId
 from dotenv import load_dotenv
@@ -27,6 +27,11 @@ if not TOGETHER_API_KEY:
     )
 
 client = Together(api_key=TOGETHER_API_KEY)
+
+# Мітки емоцій для аватара (англ.); збігайте з `videoMap` у frontend/js/chat.js
+ALLOWED_EMOTIONS: FrozenSet[str] = frozenset(
+    {"neutral", "happy", "sad", "surprise", "thinking"}
+)
 
 
 async def build_links_context(db) -> str:
@@ -68,9 +73,12 @@ async def generate_model_answer(message: str, context: str) -> str:
                             "НЕ пиши питання і не формулюй як відповідь. Заголовок має бути коротким, яскравим і привертати увагу, "
                             "наприклад: \"Оцінювання в КПІ\", \"Стипендії та бал\", \"Реєстрація на курси\", \"Важливо для першокурсників\", "
                             "\"Вау! Нові можливості ✨\" тощо.}\n"
-                            "основний текст: {розгорнута відповідь з емоціями, проте без посилань. Посилання вказуй ТІЛЬКИ в полі «посилання».}\n"
-                            "емоція: {обери один з 5 відповідних емодзі з цього набору: 😊, 😄, 😲, 🤔, 😍}\n"
-                            "посилання: {додай відповідне посилання, якщо є, інакше напиши: немає}\n"
+                            "основний текст: {розгорнута відповідь у Markdown: **жирний**, списки, абзаци; без сирого URL (URL лише в полі «посилання»). "
+                            "Емодзі можна.}\n"
+                            "емоція: {СТРОГО одне англійське слово з цього списку: neutral, happy, sad, surprise, thinking. "
+                            "neutral — спокійно; happy — радісно/підтримка; sad — шкода/сум; surprise — здивування; thinking — роздуми. "
+                            "Без лапок, без пояснень, лише слово.}\n"
+                            "посилання: {повний URL з контексту, якщо доречно; інакше рівно слово: немає}\n"
                             "Не додавай нічого за межами цього шаблону. НЕ починай речення без поля. НЕ додавай пояснень. НЕ змінюй структуру."
                         ),
                     },
@@ -86,6 +94,29 @@ async def generate_model_answer(message: str, context: str) -> str:
     return response.choices[0].message.content
 
 
+def _normalize_emotion(raw: str) -> str:
+    s = raw.strip().lower().split()[0] if raw.strip() else "neutral"
+    if s in ALLOWED_EMOTIONS:
+        return s
+    emoji_map = {
+        "😊": "happy",
+        "😄": "happy",
+        "😲": "surprise",
+        "🤔": "thinking",
+        "😍": "happy",
+    }
+    return emoji_map.get(raw.strip(), "neutral")
+
+
+def _normalize_link(raw: str) -> str:
+    if not raw:
+        return ""
+    s = raw.strip()
+    if s.lower() in ("немає", "none", "n/a", "-", "null"):
+        return ""
+    return s
+
+
 def parse_answer(answer: str) -> Dict[str, str]:
     """Парсить відповідь моделі у структурований вигляд."""
 
@@ -94,7 +125,7 @@ def parse_answer(answer: str) -> Dict[str, str]:
         answer,
         re.DOTALL,
     )
-    link_match = re.search(r"(?i)посилання\s*:\s*(.+)", answer)
+    link_match = re.search(r"(?i)посилання\s*:\s*([^\n]+)", answer)
     emotion_match = re.search(r"(?i)емоція\s*:\s*([^\n]+)", answer)
     title_match = re.search(
         r"(?i)текст\s*чату\s*:\s*(.+?)(?:\n\s*(основний\s*текст|емоція|посилання)\s*:)",
@@ -107,22 +138,30 @@ def parse_answer(answer: str) -> Dict[str, str]:
         if main_text_match
         else "Вибач, не вдалося отримати основний текст 😢"
     )
-    link = link_match.group(1).strip() if link_match else "немає"
-    emotion = emotion_match.group(1).strip() if emotion_match else "😊"
+    link_raw = link_match.group(1).strip() if link_match else ""
+    link = _normalize_link(link_raw)
+    emotion_raw = emotion_match.group(1).strip() if emotion_match else "neutral"
+    emotion = _normalize_emotion(emotion_raw)
     chat_title = title_match.group(1).strip() if title_match else "Без назви"
-
-    combined_text = f"{main_text}\n\n 🔗 Посилання: {link}"
 
     return {
         "answer_raw": answer,
-        "response": combined_text,
+        "response": main_text,
         "link": link,
         "emotion": emotion,
         "title": chat_title,
     }
 
 
-async def append_messages_to_session(db, session_id: str, user_text: str, assistant_text: str) -> None:
+async def append_messages_to_session(
+    db,
+    session_id: str,
+    user_text: str,
+    assistant_text: str,
+    assistant_emotion: str,
+    assistant_link: str,
+    assistant_title: str,
+) -> None:
     """Оновлює сесію в MongoDB, додаючи повідомлення користувача та асистента."""
 
     user_msg: Dict[str, Any] = {
@@ -133,6 +172,9 @@ async def append_messages_to_session(db, session_id: str, user_text: str, assist
     assistant_msg: Dict[str, Any] = {
         "role": "assistant",
         "text": assistant_text,
+        "emotion": assistant_emotion,
+        "link": assistant_link or "",
+        "title": assistant_title,
         "timestamp": datetime.utcnow(),
     }
 
@@ -167,6 +209,9 @@ async def process_chat(db, message: str, session_id: str) -> Dict[str, str]:
         session_id=session_id,
         user_text=cleaned_message,
         assistant_text=parsed["response"],
+        assistant_emotion=parsed["emotion"],
+        assistant_link=parsed["link"],
+        assistant_title=parsed["title"],
     )
 
     return parsed
