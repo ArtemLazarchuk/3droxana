@@ -24,7 +24,9 @@ window.addEventListener("DOMContentLoaded", async () => {
             return d.innerHTML.replace(/\n/g, "<br>");
         }
         const html = marked.parse(raw, { breaks: true, gfm: true });
-        const clean = DOMPurify.sanitize(html);
+        let clean = DOMPurify.sanitize(html);
+        clean = clean.replace(/<p>\s*<\/p>/gi, "");
+        clean = clean.replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "");
         const wrap = document.createElement("div");
         wrap.innerHTML = clean;
         wrap.querySelectorAll("a[href]").forEach((a) => {
@@ -156,6 +158,20 @@ window.addEventListener("DOMContentLoaded", async () => {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
+    /** Розбір URL для показу: хост + скорочений шлях (корінь сайту без зайвого «/»). */
+    function splitLinkForDisplay(url) {
+        try {
+            const u = new URL(url);
+            const host = u.hostname.replace(/^www\./i, "");
+            let rest = `${u.pathname}${u.search}${u.hash}`;
+            if (rest === "/" || rest === "") rest = "";
+            else if (rest.length > 56) rest = `${rest.slice(0, 53)}…`;
+            return { host, rest };
+        } catch {
+            return { host: url.slice(0, 40), rest: url.length > 40 ? "…" : "" };
+        }
+    }
+
     /** Повідомлення асистента: текст, опційно посилання (окремо від тексту). */
     function appendAssistantMessage(msg) {
         const wrap = document.createElement("div");
@@ -168,16 +184,45 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         const linkVal = (msg.link || "").trim();
         if (isHttpUrl(linkVal)) {
-            const linkRow = document.createElement("div");
-            linkRow.className = "bot-message-link small mt-2";
-            const a = document.createElement("a");
-            a.href = linkVal;
-            a.textContent = linkVal;
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            a.className = "text-info";
-            linkRow.appendChild(a);
-            wrap.appendChild(linkRow);
+            const { host, rest } = splitLinkForDisplay(linkVal);
+            const card = document.createElement("a");
+            card.href = linkVal;
+            card.target = "_blank";
+            card.rel = "noopener noreferrer";
+            card.className = "bot-message-link-card";
+            card.setAttribute("title", linkVal);
+
+            const lead = document.createElement("span");
+            lead.className = "bot-message-link-leading";
+            lead.setAttribute("aria-hidden", "true");
+            const linkIcon = document.createElement("i");
+            linkIcon.className = "bi bi-link-45deg";
+            lead.appendChild(linkIcon);
+
+            const mid = document.createElement("span");
+            mid.className = "bot-message-link-mid";
+            const main = document.createElement("span");
+            main.className = "bot-message-link-main";
+            main.textContent = host;
+            mid.appendChild(main);
+            if (rest) {
+                const sub = document.createElement("span");
+                sub.className = "bot-message-link-sub";
+                sub.textContent = rest;
+                mid.appendChild(sub);
+            }
+
+            const ext = document.createElement("span");
+            ext.className = "bot-message-link-external";
+            ext.setAttribute("aria-hidden", "true");
+            const extIcon = document.createElement("i");
+            extIcon.className = "bi bi-box-arrow-up-right";
+            ext.appendChild(extIcon);
+
+            card.appendChild(lead);
+            card.appendChild(mid);
+            card.appendChild(ext);
+            wrap.appendChild(card);
         }
 
         messagesContainer.appendChild(wrap);

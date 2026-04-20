@@ -106,7 +106,7 @@ body {
 
 /* Markdown у відповідях бота */
 .message.bot .markdown-body {
-  line-height: 1.55;
+  line-height: 1.62;
   word-break: break-word;
 }
 .message.bot .markdown-body p:last-child { margin-bottom: 0; }
@@ -144,8 +144,73 @@ body {
   color: var(--text-secondary);
 }
 
-.message.bot .bot-message-link a {
-  word-break: break-all;
+/* Компактне посилання: один рядок-картка, без «порожнього» низу */
+.message.bot a.bot-message-link-card {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 0.7rem;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(126, 200, 255, 0.28);
+  max-width: 100%;
+  box-sizing: border-box;
+  text-decoration: none;
+  color: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.message.bot a.bot-message-link-card:hover {
+  border-color: rgba(158, 213, 255, 0.5);
+  background: rgba(0, 0, 0, 0.38);
+}
+.message.bot a.bot-message-link-card:focus-visible {
+  outline: 2px solid rgba(126, 200, 255, 0.6);
+  outline-offset: 2px;
+}
+.message.bot .bot-message-link-leading {
+  flex-shrink: 0;
+  color: #7ec8ff;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  margin-top: 1px;
+}
+.message.bot .bot-message-link-mid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.message.bot .bot-message-link-main {
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: #b8e4ff;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.message.bot .bot-message-link-sub {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.message.bot .bot-message-link-external {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.2;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+.message.bot a.bot-message-link-card:hover .bot-message-link-external {
+  color: #9dd5ff;
+  opacity: 1;
 }
 
 /* Індикатор «думає» + потокове повідомлення */
@@ -169,15 +234,16 @@ body {
 .message.bot.assistant-thinking .thinking-dots::after {
   content: "...";
 }
-/* Під час стріму: без pre-wrap (інакше + <p> від Markdown дають величезні проміжки) */
+/* Під час стріму: ті самі міжрядкові/абзацні відступи, що й у готового повідомлення (без pre-wrap) */
 .message.bot.assistant-streaming .streaming-body.markdown-body {
   white-space: normal;
   color: var(--text-primary);
-  line-height: 1.38;
+  line-height: 1.62;
+  word-break: break-word;
   opacity: 0.95;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body p {
-  margin: 0.1em 0;
+  margin: 0.5em 0;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body p:first-child {
   margin-top: 0;
@@ -187,15 +253,18 @@ body {
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body ul,
 .message.bot.assistant-streaming .streaming-body.markdown-body ol {
-  margin: 0.2em 0;
+  margin: 0.5em 0;
+  padding-left: 1.35rem;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body li {
-  margin: 0.08em 0;
+  margin: 0.25em 0;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body h1,
 .message.bot.assistant-streaming .streaming-body.markdown-body h2,
 .message.bot.assistant-streaming .streaming-body.markdown-body h3 {
-  margin: 0.35em 0 0.15em;
+  font-size: 1.05rem;
+  margin: 0.75em 0 0.4em;
+  color: var(--text-primary);
 }
 
 /* === 5. ВВІД === */
