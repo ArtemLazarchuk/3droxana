@@ -5,7 +5,7 @@ import re
 import threading
 import traceback
 from datetime import datetime
-from typing import Any, AsyncIterator, Dict, FrozenSet, List, Union
+from typing import Any, AsyncIterator, Dict, FrozenSet, List, Optional, Union
 
 from bson import ObjectId
 from dotenv import load_dotenv
@@ -69,26 +69,47 @@ SYSTEM_PROMPT = (
 )
 
 
-def _chat_messages(user_message: str, context: str) -> List[Dict[str, str]]:
-    return [
+def _chat_messages(
+    user_message: str,
+    context: str,
+    attachment_block: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    msgs: List[Dict[str, str]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Контекст:\n{context}"},
-        {"role": "user", "content": user_message},
     ]
+    if attachment_block:
+        msgs.append(
+            {
+                "role": "user",
+                "content": (
+                    "Нижче — вміст або опис файлу, який надіслав користувач. "
+                    "Відповідай на його запит, спираючись на цей вміст разом із контекстом FAQ/сайтів; "
+                    "не вигадуй факти про файл, яких там немає.\n\n"
+                    + attachment_block
+                ),
+            }
+        )
+    msgs.append({"role": "user", "content": user_message})
+    return msgs
 
 
 def _sse_event(obj: Dict[str, Any]) -> bytes:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n".encode("utf-8")
 
 
-async def generate_model_answer(message: str, context: str) -> str:
+async def generate_model_answer(
+    message: str,
+    context: str,
+    attachment_block: Optional[str] = None,
+) -> str:
     """Викликає модель та повертає сирий текст відповіді."""
 
     try:
         response = await asyncio.to_thread(
             lambda: client.chat.completions.create(
                 model="deepseek-ai/DeepSeek-V3",
-                messages=_chat_messages(message, context),
+                messages=_chat_messages(message, context, attachment_block),
             )
         )
     except Exception as exc:  # noqa: BLE001
@@ -221,6 +242,7 @@ def _stream_worker(
     queue: asyncio.Queue,
     user_message: str,
     context: str,
+    attachment_block: Optional[str] = None,
 ) -> None:
     """Блокуючий збір токенів Together (stream=True) у фоновому потоці."""
 
@@ -231,7 +253,7 @@ def _stream_worker(
     try:
         stream = client.chat.completions.create(
             model="deepseek-ai/DeepSeek-V3",
-            messages=_chat_messages(user_message, context),
+            messages=_chat_messages(user_message, context, attachment_block),
             stream=True,
         )
         parts: list[str] = []
@@ -255,14 +277,19 @@ async def stream_chat_events(
     db,
     session_id: str,
     user_message: str,
+    attachment_block: Optional[str] = None,
+    attachment_filename: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """
     SSE-потік: status (думає) → delta (фрагменти сирої відповіді) → done (розпарсені поля) або error.
     Користувача записує в БД одразу; асистента — після повної відповіді.
     """
 
-    cleaned = user_message.strip()
-    await append_user_message(db, session_id, cleaned)
+    cleaned = (user_message or "").strip() or "Проаналізуй вкладений файл."
+    display_user = cleaned
+    if attachment_filename:
+        display_user = f"{cleaned}\n\n📎 {attachment_filename}"
+    await append_user_message(db, session_id, display_user)
     yield _sse_event({"type": "status", "phase": "thinking"})
 
     context = await build_rag_context(db, cleaned)
@@ -270,7 +297,7 @@ async def stream_chat_events(
     queue: asyncio.Queue = asyncio.Queue()
     thread = threading.Thread(
         target=_stream_worker,
-        args=(loop, queue, cleaned, context),
+        args=(loop, queue, cleaned, context, attachment_block),
         daemon=True,
     )
     thread.start()
@@ -307,7 +334,13 @@ async def stream_chat_events(
             return
 
 
-async def process_chat(db, message: str, session_id: str) -> Dict[str, str]:
+async def process_chat(
+    db,
+    message: str,
+    session_id: str,
+    attachment_block: Optional[str] = None,
+    attachment_filename: Optional[str] = None,
+) -> Dict[str, str]:
     """
     Головна точка входу сервісу чату:
     - збирає контекст,
@@ -316,15 +349,20 @@ async def process_chat(db, message: str, session_id: str) -> Dict[str, str]:
     - оновлює сесію в базі.
     """
 
-    cleaned_message = message.strip()
+    cleaned_message = (message or "").strip() or "Проаналізуй вкладений файл."
+    display_user = cleaned_message
+    if attachment_filename:
+        display_user = f"{cleaned_message}\n\n📎 {attachment_filename}"
     context = await build_rag_context(db, cleaned_message)
-    answer = await generate_model_answer(cleaned_message, context)
+    answer = await generate_model_answer(
+        cleaned_message, context, attachment_block
+    )
     parsed = parse_answer(answer)
 
     await append_messages_to_session(
         db=db,
         session_id=session_id,
-        user_text=cleaned_message,
+        user_text=display_user,
         assistant_text=parsed["response"],
         assistant_emotion=parsed["emotion"],
         assistant_link=parsed["link"],

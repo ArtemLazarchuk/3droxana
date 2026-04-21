@@ -327,6 +327,26 @@ body {
   width: 100%;
 }
 
+.btn-attach {
+  flex-shrink: 0;
+  background-color: #3a3a45;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  width: 44px;
+  min-height: 40px;
+  color: #c8c8d4;
+}
+
+.btn-attach:hover {
+  color: #fff;
+  background-color: #48485a;
+}
+
+.btn-attach.has-file {
+  color: var(--accent-color);
+  border-color: rgba(138, 79, 255, 0.5);
+}
+
 .btn-send {
   background-color: var(--accent-color);
   border: none;

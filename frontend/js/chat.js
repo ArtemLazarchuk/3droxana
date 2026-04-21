@@ -171,6 +171,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     const messagesContainer = document.getElementById("messages");
     const userInput = document.getElementById("user-input");
     const sendBtn = document.getElementById("send-btn");
+    const attachBtn = document.getElementById("attach-btn");
+    const fileInput = document.getElementById("file-input");
+    let pendingFile = null;
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
     const newChatBtn = document.getElementById("new-chat-btn");
@@ -427,19 +430,48 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    function syncAttachButton() {
+        if (!attachBtn) return;
+        attachBtn.classList.toggle("has-file", !!pendingFile);
+        attachBtn.title = pendingFile
+            ? `Вкладено: ${pendingFile.name} (клацніть скрепку, щоб змінити)`
+            : "Додати PDF або зображення";
+    }
+
+    attachBtn?.addEventListener("click", () => {
+        fileInput?.click();
+    });
+    fileInput?.addEventListener("change", () => {
+        const f = fileInput.files && fileInput.files[0];
+        fileInput.value = "";
+        if (!f) return;
+        pendingFile = f;
+        syncAttachButton();
+    });
+
     // ВІДПРАВКА ПОВІДОМЛЕННЯ (SSE-потік)
     let chatInFlight = false;
 
     async function sendMessage() {
-        const text = userInput.value.trim();
+        const textRaw = userInput.value.trim();
         const sessionId = localStorage.getItem("sessionId");
-        if (!text || !sessionId || chatInFlight) return;
+        if ((!textRaw && !pendingFile) || !sessionId || chatInFlight) return;
+
+        const textForApi = textRaw || "Проаналізуй вкладений файл.";
+        const fileToSend = pendingFile;
+        const userBubble = fileToSend
+            ? `${textForApi}\n\n📎 ${fileToSend.name}`
+            : textRaw;
 
         flushStreamingMathTimer();
-        appendMessage("user", text);
+        appendMessage("user", userBubble);
         userInput.value = "";
+        pendingFile = null;
+        syncAttachButton();
+
         chatInFlight = true;
         if (sendBtn) sendBtn.disabled = true;
+        if (attachBtn) attachBtn.disabled = true;
         if (userInput) userInput.disabled = true;
 
         const thinkingEl = createThinkingBubble();
@@ -465,21 +497,52 @@ window.addEventListener("DOMContentLoaded", async () => {
         };
 
         try {
-            const res = await fetch(`${API_BASE_URL}/faq/chat/stream`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "text/event-stream",
-                },
-                body: JSON.stringify({ message: text, sessionId, userId }),
-            });
+            let res;
+            if (fileToSend) {
+                const fd = new FormData();
+                fd.append("message", textForApi);
+                fd.append("sessionId", sessionId);
+                fd.append("userId", userId);
+                fd.append("file", fileToSend, fileToSend.name);
+                res = await fetch(`${API_BASE_URL}/faq/chat/stream/upload`, {
+                    method: "POST",
+                    headers: { Accept: "text/event-stream" },
+                    body: fd,
+                });
+            } else {
+                res = await fetch(`${API_BASE_URL}/faq/chat/stream`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "text/event-stream",
+                    },
+                    body: JSON.stringify({
+                        message: textForApi,
+                        sessionId,
+                        userId,
+                    }),
+                });
+            }
 
             if (!res.ok) {
                 cleanupThinking();
-                appendMessage(
-                    "bot",
-                    `Помилка сервера (${res.status}). Спробуйте ще раз.`
-                );
+                let errMsg = `Помилка сервера (${res.status}). Спробуйте ще раз.`;
+                try {
+                    const j = await res.json();
+                    if (j.detail) {
+                        errMsg =
+                            typeof j.detail === "string"
+                                ? j.detail
+                                : Array.isArray(j.detail)
+                                  ? j.detail
+                                        .map((x) => x.msg || JSON.stringify(x))
+                                        .join("; ")
+                                  : JSON.stringify(j.detail);
+                    }
+                } catch (_) {
+                    /* не JSON */
+                }
+                appendMessage("bot", errMsg);
                 return;
             }
 
@@ -533,6 +596,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         } finally {
             chatInFlight = false;
             if (sendBtn) sendBtn.disabled = false;
+            if (attachBtn) attachBtn.disabled = false;
             if (userInput) userInput.disabled = false;
             if (emotionLabel && emotionLabel.textContent === "думає…") {
                 emotionLabel.textContent = "Очікування";
