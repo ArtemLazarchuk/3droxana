@@ -14,3 +14,9 @@ JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.environ.get("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440")  # 24 години за замовчуванням
 )
+
+# Опційно: вхід через Google OAuth (див. README)
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+# Якщо застосунок за reverse-proxy і request.base_url дає http://internal — задайте публічний базовий URL без слеша в кінці.
+PUBLIC_APP_BASE_URL = os.environ.get("PUBLIC_APP_BASE_URL", "").strip().rstrip("/")

@@ -214,7 +214,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     const newChatBtn = document.getElementById("new-chat-btn");
     const avatarBox = document.querySelector('.avatar-fixed');
     const resizeHandle = document.querySelector('.resize-handle');
-    const themeToggle = document.getElementById("theme-toggle");
 
     /** Дефолтна позиція аватара: над блоком вводу (після drag залишаються top/left — не чіпаємо). */
     function syncAvatarDefaultBottom() {
@@ -271,16 +270,212 @@ window.addEventListener("DOMContentLoaded", async () => {
         return wrap;
     }
 
-    const user = JSON.parse(localStorage.getItem("user"));
-    const userId = user?._id?.$oid || user?._id || null;
-
-    // --- 1. ТЕМА ---
-    function applyTheme(t) {
-        document.body.setAttribute("data-theme", t); localStorage.setItem("theme", t);
-        const i = document.getElementById("theme-icon"); if (i) i.className = t === "light" ? "bi bi-sun-fill" : "bi bi-moon-stars-fill";
+    function parseStoredUser() {
+        const raw = localStorage.getItem("user");
+        if (raw == null || raw === "") return null;
+        try {
+            let u = JSON.parse(raw);
+            if (typeof u === "string") {
+                u = JSON.parse(u);
+            }
+            return u && typeof u === "object" ? u : null;
+        } catch {
+            return null;
+        }
     }
-    applyTheme(localStorage.getItem("theme") || "dark");
-    themeToggle?.addEventListener("click", () => applyTheme(document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"));
+
+    const user = parseStoredUser();
+    const userId = user?._id?.$oid || user?._id || user?.id || null;
+
+    // --- 1. ТЕМА (світла / темна / як у системи) + меню в сайдбарі ---
+    function normalizeThemePref(stored) {
+        if (stored === "light" || stored === "dark" || stored === "system") return stored;
+        return "dark";
+    }
+
+    function effectiveTheme(pref) {
+        if (pref === "system") {
+            return window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+        }
+        return pref === "light" ? "light" : "dark";
+    }
+
+    function applyThemePref(pref) {
+        const p = normalizeThemePref(pref);
+        localStorage.setItem("theme", p);
+        document.body.setAttribute("data-theme", effectiveTheme(p));
+        syncThemeSubmenuActive(p);
+    }
+
+    function syncThemeSubmenuActive(pref) {
+        document.querySelectorAll(".sidebar-account-theme-btn[data-theme-pref]").forEach((btn) => {
+            const v = btn.getAttribute("data-theme-pref");
+            btn.classList.toggle("is-active", v === pref);
+        });
+    }
+
+    function isHttpPhotoUrl(s) {
+        const t = String(s || "").trim();
+        if (!t) return false;
+        try {
+            const u = new URL(t);
+            return u.protocol === "https:" || u.protocol === "http:";
+        } catch {
+            return false;
+        }
+    }
+
+    function fillSidebarAccountBtn() {
+        const wrap = document.getElementById("sidebar-account-wrap");
+        const loginRow = document.getElementById("sidebar-login-row");
+        const nameEl = document.getElementById("sidebar-user-name");
+        const emailEl = document.getElementById("sidebar-user-email");
+        const avEl = document.getElementById("sidebar-user-avatar");
+        const photoEl = document.getElementById("sidebar-user-photo");
+        if (!nameEl || !emailEl) return;
+
+        const u = user;
+        const emailStr = String(u?.email ?? "").trim();
+        const nameStr = String(u?.username ?? "").trim();
+        if (!u || (!emailStr && !nameStr)) {
+            if (wrap) wrap.hidden = true;
+            if (loginRow) loginRow.hidden = false;
+            return;
+        }
+        if (wrap) wrap.hidden = false;
+        if (loginRow) loginRow.hidden = true;
+
+        const email = emailStr || "—";
+        const rawName = (nameStr || email.split("@")[0] || "Користувач").trim();
+        const displayName =
+            rawName.length > 22 ? `${rawName.slice(0, 19)}…` : rawName;
+        nameEl.textContent = displayName;
+        emailEl.textContent = email;
+
+        const pic = u.picture || u.avatarUrl || "";
+        if (photoEl && avEl) {
+            if (isHttpPhotoUrl(pic)) {
+                photoEl.onerror = () => {
+                    photoEl.onerror = null;
+                    photoEl.removeAttribute("src");
+                    photoEl.hidden = true;
+                    avEl.removeAttribute("hidden");
+                    const parts = rawName.split(/\s+/).filter(Boolean);
+                    let ini = "?";
+                    if (parts.length >= 2) {
+                        ini = `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+                    } else if (rawName.length >= 2) {
+                        ini = rawName.slice(0, 2).toUpperCase();
+                    } else if (email.length >= 2 && email !== "—") {
+                        ini = email.slice(0, 2).toUpperCase();
+                    }
+                    avEl.textContent = ini;
+                };
+                photoEl.src = pic;
+                photoEl.hidden = false;
+                avEl.setAttribute("hidden", "");
+            } else {
+                photoEl.removeAttribute("src");
+                photoEl.hidden = true;
+                avEl.removeAttribute("hidden");
+                const parts = rawName.split(/\s+/).filter(Boolean);
+                let initials = "?";
+                if (parts.length >= 2) {
+                    initials = `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+                } else if (rawName.length >= 2) {
+                    initials = rawName.slice(0, 2).toUpperCase();
+                } else if (email.length >= 2 && email !== "—") {
+                    initials = email.slice(0, 2).toUpperCase();
+                }
+                avEl.textContent = initials;
+            }
+        }
+    }
+
+    function initSidebarAccountMenu() {
+        const btn = document.getElementById("sidebar-account-btn");
+        const wrap = document.getElementById("sidebar-account-wrap");
+        const dropdown = document.getElementById("sidebar-account-dropdown");
+        const themeSlot = document.getElementById("sidebar-theme-slot");
+        const themeTrigger = document.getElementById("sidebar-theme-menu-trigger");
+        const themeFlyout = document.getElementById("sidebar-theme-flyout");
+        if (!btn || !wrap || !dropdown) return;
+
+        function setThemeFlyout(open) {
+            if (!themeSlot || !themeFlyout || !themeTrigger) return;
+            themeSlot.classList.toggle("is-open", !!open);
+            themeTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+            themeFlyout.hidden = !open;
+        }
+
+        function setOpen(open) {
+            wrap.classList.toggle("is-open", open);
+            btn.setAttribute("aria-expanded", open ? "true" : "false");
+            dropdown.hidden = !open;
+            if (!open) setThemeFlyout(false);
+        }
+
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setOpen(dropdown.hidden);
+        });
+
+        themeTrigger?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!themeFlyout) return;
+            setThemeFlyout(themeFlyout.hidden);
+        });
+
+        themeFlyout?.addEventListener("click", (e) => e.stopPropagation());
+
+        themeFlyout?.querySelectorAll("[data-theme-pref]").forEach((el) => {
+            el.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const pref = el.getAttribute("data-theme-pref");
+                if (pref) applyThemePref(pref);
+                setThemeFlyout(false);
+            });
+        });
+
+        dropdown.addEventListener("click", (e) => e.stopPropagation());
+
+        const logoutOpen = document.getElementById("sidebar-dropdown-logout");
+        logoutOpen?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setOpen(false);
+            const modalEl = document.getElementById("logoutModal");
+            if (modalEl && typeof bootstrap !== "undefined") {
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            }
+        });
+
+        document.addEventListener("click", () => setOpen(false));
+        document.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape") return;
+            if (themeFlyout && !themeFlyout.hidden) {
+                setThemeFlyout(false);
+                return;
+            }
+            setOpen(false);
+        });
+
+        window
+            .matchMedia("(prefers-color-scheme: dark)")
+            .addEventListener("change", () => {
+                if (normalizeThemePref(localStorage.getItem("theme")) === "system") {
+                    document.body.setAttribute(
+                        "data-theme",
+                        effectiveTheme("system")
+                    );
+                }
+            });
+    }
+
+    applyThemePref(normalizeThemePref(localStorage.getItem("theme")));
+    initSidebarAccountMenu();
+    fillSidebarAccountBtn();
 
     // --- 2. ВИХІД ---
     confirmLogout?.addEventListener("click", () => { localStorage.clear(); window.location.href = "/"; });
