@@ -5,19 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Історія | KPI Assistant</title>
     <script>
-        (function() {
-            if (!localStorage.getItem("user")) window.location.href = "/auth";
-        })();
+        (function() { if (!localStorage.getItem("user")) window.location.href = "/auth"; })();
     </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
         body { display: flex; height: 100vh; background-color: var(--bg-color); margin: 0; }
-        .history-content { flex-grow: 1; margin-left: 280px; height: 100vh; display: flex; flex-direction: column; padding: 40px; overflow: hidden; }
-        .history-list-scroll { flex-grow: 1; overflow-y: auto; margin-top: 30px; padding-right: 10px; }
-        .chat-card { background-color: var(--sidebar-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; color: inherit; text-decoration: none; }
-        .chat-card:hover { border-color: var(--accent-color); background-color: rgba(138, 79, 255, 0.05); transform: translateX(5px); }
+        
+        .history-content { 
+            flex-grow: 1; 
+            margin-left: var(--sidebar-width); 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+            transition: margin-left 0.3s ease;
+        }
+
+        .history-list-scroll { 
+            flex-grow: 1; 
+            overflow-y: auto; 
+            /* ВИПРАВЛЕНО: піднято заголовок (зменшено padding-top) */
+            padding: 20px 40px 40px 40px; 
+        }
+
+        /* Стиль кнопок керування в картці */
+        .chat-actions {
+            display: flex;
+            gap: 10px;
+            margin-left: 20px;
+        }
+
+        .action-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            transition: 0.2s;
+            padding: 5px;
+        }
+
+        .action-btn:hover { color: var(--accent-color); transform: scale(1.1); }
+        .btn-delete:hover { color: #ff5f5f; }
+
         @media (max-width: 768px) { .history-content { margin-left: 0; } }
     </style>
 </head>
@@ -25,11 +56,16 @@
 
 <nav class="sidebar" id="sidebar">
     <div class="p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-2"><i class="bi bi-robot fs-4" style="color: var(--accent-color);"></i><span class="fw-bold">KPI Helper</span></div>
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-robot fs-4" style="color: var(--accent-color);"></i>
+            <span class="fw-bold">KPI Helper</span>
+        </div>
         <div id="theme-toggle" class="theme-switch-btn"><i class="bi bi-moon-stars-fill" id="theme-icon"></i></div>
     </div>
     <div class="px-3">
-        <a href="/chat" class="btn btn-new-chat w-100 text-start btn-sm mb-3 text-decoration-none"><i class="bi bi-plus-lg me-2"></i> Новий чат</a>
+        <!-- ВИПРАВЛЕНО: Кнопка тепер така сама, як у чаті -->
+        <button id="new-chat-btn" class="btn btn-new-chat">+ Новий чат</button>
+        
         <div class="d-flex flex-column">
             <a href="/chat" class="nav-link-custom"><i class="bi bi-chat-dots"></i> <span>Чат</span></a>
             <a href="/sites" class="nav-link-custom"><i class="bi bi-globe"></i> <span>Сайти КПІ</span></a>
@@ -41,55 +77,144 @@
     </div>
 </nav>
 
-<main class="history-content">
-    <div class="d-flex justify-content-between align-items-center">
-        <h1 class="fw-bold m-0">Історія розмов</h1>
-        <div class="text-secondary small" id="chatCount"></div>
+<main class="history-content" id="main-content">
+    <header class="content-header">
+        <button id="sidebar-toggle" class="btn text-secondary me-3"><i class="bi bi-layout-sidebar"></i></button>
+    </header>
+
+    <div class="history-list-scroll">
+        <div class="d-flex justify-content-between align-items-center mb-5">
+            <h1 class="fw-bold m-0">Історія розмов</h1>
+            <div class="text-secondary small" id="chatCount"></div>
+        </div>
+
+        <div id="historyContent">
+            <div class="text-center mt-5"><div class="spinner-border text-primary"></div></div>
+        </div>
+        
+        <div id="noChats" class="text-center text-secondary mt-5" style="display: none;">
+            <i class="bi bi-chat-dots fs-1 d-block mb-3"></i> Порожньо
+        </div>
     </div>
-    <div class="history-list-scroll" id="historyContent"><div class="text-center mt-5"><div class="spinner-border text-primary"></div></div></div>
 </main>
 
+<!-- МОДАЛКА ПЕРЕЙМЕНУВАННЯ -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-secondary"><h5>Перейменувати чат</h5></div>
+      <div class="modal-body">
+          <input type="text" class="form-control custom-input" id="newChatName">
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+        <button type="button" class="btn btn-primary" id="saveNameBtn" style="background-color: var(--accent-color); border:none;">Зберегти</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ВИДАЛЕННЯ -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-secondary"><h5>Видалити розмову?</h5></div>
+      <div class="modal-body">Цю дію неможливо буде скасувати.</div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ні</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Так, видалити</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ВИХОДУ -->
 <div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="background-color: var(--sidebar-bg); border: 1px solid var(--border-color); color: var(--text-primary);">
-      <div class="modal-header border-secondary"><h5>Вихід</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-content">
+      <div class="modal-header border-secondary"><h5>Вихід</h5></div>
       <div class="modal-body">Бажаєте вийти з акаунту?</div>
       <div class="modal-footer border-secondary">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ні</button>
-        <button type="button" class="btn btn-danger" id="confirmLogout">Так, вийти</button>
+        <button type="button" class="btn btn-danger" id="confirmLogout">Вийти</button>
       </div>
     </div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/chat.js"></script>
 <script>
-    function applyTheme(t) {
-        document.body.setAttribute("data-theme", t); localStorage.setItem("theme", t);
-        const i = document.getElementById("theme-icon"); if (i) i.className = t === "light" ? "bi bi-sun-fill" : "bi bi-moon-stars-fill";
-    }
-    document.addEventListener("DOMContentLoaded", () => {
-        applyTheme(localStorage.getItem("theme") || "dark");
-        document.getElementById("theme-toggle")?.addEventListener("click", () => applyTheme(document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"));
-        document.getElementById("confirmLogout")?.addEventListener("click", () => { localStorage.clear(); window.location.href = "/"; });
-        fetchHistory();
-    });
+    let currentSessionId = null;
+
     async function fetchHistory() {
-        const c = document.getElementById('historyContent');
+        const container = document.getElementById('historyContent');
         try {
-            const u = JSON.parse(localStorage.getItem("user")), res = await fetch(`/api/sessions/user/${u?._id?.$oid || u?._id}`);
-            const d = await res.json(); c.innerHTML = '';
-            if (d.length) {
-                document.getElementById('chatCount').textContent = `Діалогів: ${d.length}`;
-                d.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)).forEach(s => {
-                    const card = document.createElement('div'); card.className = 'chat-card';
-                    card.innerHTML = `<div><h5 class="fw-bold mb-1">${s.name || 'Чат'}</h5><span class="text-secondary small">${new Date(s.updatedAt).toLocaleString()}</span></div><i class="bi bi-chevron-right text-secondary"></i>`;
-                    card.onclick = () => { localStorage.setItem("sessionId", s._id?.$oid || s._id); window.location.href = "/chat"; };
-                    c.appendChild(card);
-                });
-            } else c.innerHTML = '<div class="text-center text-secondary mt-5">Порожньо</div>';
-        } catch (e) { c.innerHTML = 'Помилка'; }
+            const user = JSON.parse(localStorage.getItem("user"));
+            const res = await fetch(`/api/sessions/user/${user?._id?.$oid || user?._id}`);
+            const data = await res.json();
+            container.innerHTML = '';
+            
+            if (!data.length) { document.getElementById('noChats').style.display = 'block'; return; }
+            document.getElementById('chatCount').textContent = `Діалогів: ${data.length}`;
+            
+            data.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)).forEach(s => {
+                const card = document.createElement('div');
+                card.className = 'chat-card';
+                const sid = s._id?.$oid || s._id;
+                
+                card.innerHTML = `
+                    <div style="flex-grow: 1;" onclick="openChat('${sid}')">
+                        <h5 class="fw-bold mb-1">${s.name || 'Новий чат'}</h5>
+                        <span class="text-secondary small">${new Date(s.updatedAt).toLocaleString()}</span>
+                    </div>
+                    <div class="chat-actions">
+                        <button class="action-btn" onclick="prepareEdit('${sid}', '${s.name}')" data-bs-toggle="modal" data-bs-target="#editModal">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <button class="action-btn btn-delete" onclick="prepareDelete('${sid}')" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        } catch (e) { container.innerHTML = 'Помилка завантаження даних'; }
     }
+
+    function openChat(id) {
+        localStorage.setItem("sessionId", id);
+        window.location.href = "/chat";
+    }
+
+    function prepareDelete(id) { currentSessionId = id; }
+    function prepareEdit(id, name) { 
+        currentSessionId = id; 
+        document.getElementById('newChatName').value = name;
+    }
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+        if (!currentSessionId) return;
+        try {
+            const res = await fetch(`/api/sessions/${currentSessionId}`, { method: 'DELETE' });
+            if (res.ok) location.reload();
+        } catch (e) { console.error(e); }
+    });
+
+    document.getElementById('saveNameBtn').addEventListener('click', async () => {
+        const newName = document.getElementById('newChatName').value;
+        if (!currentSessionId || !newName) return;
+        try {
+            const res = await fetch(`/api/sessions/${currentSessionId}/rename`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName })
+            });
+            if (res.ok) location.reload();
+        } catch (e) { console.error(e); }
+    });
+
+    document.addEventListener("DOMContentLoaded", fetchHistory);
 </script>
 </body>
 </html>

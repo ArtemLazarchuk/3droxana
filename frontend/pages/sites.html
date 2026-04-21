@@ -4,77 +4,79 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сайти КПІ | KPI Assistant</title>
+    <!-- Ця сторінка публічна, тому редиректу немає -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        body { display: flex; height: 100vh; background-color: var(--bg-color); margin: 0; }
-        .sites-container-fixed { 
-            flex-grow: 1; 
-            margin-left: var(--sidebar-width); 
-            height: 100vh; 
-            display: flex; 
-            flex-direction: column; 
-            overflow: hidden; 
-            background-color: var(--bg-color);
-            transition: margin-left 0.3s ease;
-        }
-        .sites-scroll-area {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 40px;
-        }
-        @media (max-width: 768px) { .sites-container-fixed { margin-left: 0; } }
-    </style>
 </head>
 <body data-theme="dark">
 
+<!-- 1. САЙДБАР -->
 <nav class="sidebar" id="sidebar">
     <div class="p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-2">
             <i class="bi bi-robot fs-4" style="color: var(--accent-color);"></i>
             <span class="fw-bold">KPI Helper</span>
         </div>
-        <div id="theme-toggle" class="theme-switch-btn"><i class="bi bi-moon-stars-fill" id="theme-icon"></i></div>
-    </div>
-    <div class="px-3">
-        <button id="new-chat-btn" class="btn btn-new-chat" style="display: none;">Новий чат</button>
-        <div class="d-flex flex-column">
-            <a href="/chat" class="nav-link-custom" id="link-chat"><i class="bi bi-chat-dots"></i> <span>Чат</span></a>
-            <a href="/sites" class="nav-link-custom active"><i class="bi bi-globe"></i> <span>Сайти КПІ</span></a>
-            <a href="/history" class="nav-link-custom" id="link-history"><i class="bi bi-clock-history"></i> <span>Історія</span></a>
+        <div id="theme-toggle" class="theme-switch-btn" title="Змінити тему">
+            <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
         </div>
     </div>
+
+    <div class="px-3">
+        <!-- Уніфікована кнопка Новий чат -->
+        <button id="new-chat-btn" class="btn btn-new-chat">+ Новий чат</button>
+        
+        <div class="d-flex flex-column">
+            <a href="/chat" class="nav-link-custom"><i class="bi bi-chat-dots"></i> <span>Чат</span></a>
+            <a href="/sites" class="nav-link-custom active"><i class="bi bi-globe"></i> <span>Сайти КПІ</span></a>
+            <a href="/history" class="nav-link-custom"><i class="bi bi-clock-history"></i> <span>Історія</span></a>
+        </div>
+    </div>
+
     <div class="mt-auto p-3 border-top border-secondary">
-        <a href="#" class="nav-link-custom logout-btn" id="main-auth-btn" data-bs-toggle="modal" data-bs-target="#logoutModal">
-            <i class="bi bi-box-arrow-left"></i> <span>Вийти</span>
+        <!-- Кнопка змінюється на Увійти/Вийти через JS -->
+        <a href="#" class="nav-link-custom" id="auth-trigger-btn" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            <i class="bi bi-box-arrow-left"></i> <span id="auth-btn-text">Вийти</span>
         </a>
     </div>
 </nav>
 
+<!-- 2. ОСНОВНИЙ КОНТЕНТ -->
 <main class="sites-container-fixed" id="main-content">
     <header class="content-header">
-        <button id="sidebar-toggle" class="btn text-secondary me-3"><i class="bi bi-layout-sidebar"></i></button>
-        <!-- ТЕКСТ ПРИБРАНО ЗВІДСИ, ЗАЛИШЕНО ТІЛЬКИ КНОПКУ -->
+        <button id="sidebar-toggle" class="btn text-secondary me-3">
+            <i class="bi bi-layout-sidebar"></i>
+        </button>
+        <span class="fw-bold">Корисні ресурси</span>
     </header>
     
-    <div class="sites-scroll-area">
-        <h1 class="fw-bold mb-5">Корисні ресурси</h1>
+    <div class="scroll-content">
+        <h1 class="fw-bold mb-5">Корисні ресурси КПІ</h1>
         <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="sitesGrid">
-            <div class="text-center w-100 mt-5"><div class="spinner-border text-primary"></div></div>
+            <!-- Сюди завантажуються картки -->
+            <div class="text-center w-100 mt-5">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
         </div>
-        <div id="noSites" class="text-center text-secondary mt-5" style="display: none;">Ресурсів не знайдено</div>
+        <div id="noSites" class="text-center text-secondary mt-5" style="display: none;">
+            Ресурсів не знайдено
+        </div>
     </div>
 </main>
 
+<!-- МОДАЛКА ВИХОДУ -->
 <div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header border-secondary"><h5>Вихід</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-header border-secondary">
+          <h5 class="modal-title">Підтвердження</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
       <div class="modal-body">Ви впевнені, що хочете вийти з акаунту?</div>
       <div class="modal-footer border-secondary">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ні</button>
-        <button type="button" class="btn btn-danger" id="confirmLogout">Вийти</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+        <button type="button" class="btn btn-danger px-4" id="confirmLogout">Вийти</button>
       </div>
     </div>
   </div>
@@ -83,49 +85,58 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/static/js/chat.js"></script>
 <script>
-    function applyTheme(t) {
-        document.body.setAttribute("data-theme", t); localStorage.setItem("theme", t);
-        const i = document.getElementById("theme-icon"); if (i) i.className = t === "light" ? "bi bi-sun-fill" : "bi bi-moon-stars-fill";
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-        applyTheme(localStorage.getItem("theme") || "dark");
-        const user = localStorage.getItem("user");
-        if (!user) {
-            const btn = document.getElementById("main-auth-btn");
-            btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> <span>Увійти</span>';
-            btn.removeAttribute("data-bs-toggle"); btn.href = "/auth";
-            document.getElementById("new-chat-btn").style.display = "none";
-        } else {
-            document.getElementById("new-chat-btn").style.display = "flex";
-        }
-        document.getElementById("theme-toggle")?.addEventListener("click", () => applyTheme(document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"));
-        document.getElementById("confirmLogout")?.addEventListener("click", () => { localStorage.clear(); window.location.href = "/"; });
-        loadLinks();
-    });
-
     async function loadLinks() {
         const grid = document.getElementById("sitesGrid");
         try {
             const res = await fetch("http://localhost:8000/api/links");
             const links = await res.json();
             grid.innerHTML = "";
-            if (!links || links.length === 0) { document.getElementById('noSites').style.display = 'block'; return; }
+            
+            if (!links || links.length === 0) {
+                document.getElementById('noSites').style.display = 'block';
+                return;
+            }
+
             links.forEach(link => {
-                const col = document.createElement("div"); col.className = "col";
+                const col = document.createElement("div");
+                col.className = "col";
                 col.innerHTML = `
                     <div class="site-card">
                         <div>
                             <div class="site-icon"><i class="bi bi-browser-chrome"></i></div>
                             <h5 class="fw-bold">${link.title}</h5>
-                            <p class="text-secondary small">${link.description || "Інформація для студентів КПІ."}</p>
+                            <p class="text-secondary small">${link.description || "Ресурс для студентів та викладачів."}</p>
                         </div>
-                        <a href="${link.url}" target="_blank" class="btn btn-primary fw-bold" style="background-color: var(--accent-color); border:none; padding: 10px;">Відвідати</a>
-                    </div>`;
+                        <a href="${link.url}" target="_blank" class="btn btn-primary fw-bold" 
+                           style="background-color: var(--accent-color); border:none; padding: 12px; border-radius: 10px;">
+                           Відвідати <i class="bi bi-box-arrow-up-right ms-1"></i>
+                        </a>
+                    </div>
+                `;
                 grid.appendChild(col);
             });
-        } catch (e) { grid.innerHTML = "<p class='text-center w-100'>Помилка завантаження ресурсів.</p>"; }
+        } catch (e) {
+            grid.innerHTML = "<p class='text-center w-100 text-danger'>Помилка завантаження даних.</p>";
+        }
     }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const user = localStorage.getItem("user");
+        const authBtn = document.getElementById("auth-trigger-btn");
+        const authText = document.getElementById("auth-btn-text");
+        const newChatBtn = document.getElementById("new-chat-btn");
+
+        if (!user) {
+            authText.innerText = "Увійти";
+            authBtn.querySelector('i').className = "bi bi-box-arrow-in-right";
+            authBtn.removeAttribute("data-bs-toggle");
+            authBtn.href = "/auth";
+            if(newChatBtn) newChatBtn.style.display = "none";
+        } else {
+            if(newChatBtn) newChatBtn.style.display = "flex";
+        }
+        loadLinks();
+    });
 </script>
 </body>
 </html>

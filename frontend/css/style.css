@@ -1,8 +1,9 @@
 /* === 1. ЗМІННІ ТА ТЕМИ === */
 :root {
-  /* Темна тема (стандартна) */
+  /* Темна тема */
   --bg-color: #121212;
   --sidebar-bg: #1e1e1e;
+  --header-bg: #1e1e1e;
   --accent-color: #8a4fff;
   --accent-hover: #7038d4;
   --text-primary: #ffffff;
@@ -20,6 +21,7 @@
   /* Світла тема */
   --bg-color: #f8f9fa;
   --sidebar-bg: #ffffff;
+  --header-bg: #ffffff;
   --text-primary: #1a1a1a;
   --text-secondary: #555555;
   --placeholder-color: #6c757d;
@@ -30,7 +32,7 @@
   --btn-new-chat-text: var(--accent-color);
 }
 
-/* === 2. ЗАГАЛЬНІ СТИЛІ === */
+/* === 2. БАЗОВІ СТИЛІ === */
 body {
   font-family: 'Inter', sans-serif;
   background-color: var(--bg-color);
@@ -55,8 +57,7 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   display: flex;
   flex-direction: column;
   position: fixed;
-  left: 0;
-  top: 0;
+  left: 0; top: 0;
   z-index: 1000;
   transition: transform 0.3s ease-in-out, background-color 0.3s, border-color 0.3s;
 }
@@ -66,16 +67,22 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   transform: translateX(-100%);
 }
 
+/* УНІФІКОВАНА КНОПКА НОВИЙ ЧАТ */
 .btn-new-chat {
-  border: 1px solid var(--accent-color) !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--accent-color) !important;
   color: var(--btn-new-chat-text) !important;
-  background-color: rgba(138, 79, 255, 0.08) !important;
-  border-radius: 10px;
+  background-color: transparent !important;
+  border-radius: 12px;
   padding: 10px;
   transition: 0.3s;
-  font-weight: 600;
+  font-weight: 700;
   width: 100%;
   margin-bottom: 20px;
+  text-decoration: none !important;
+  font-size: 0.9rem;
 }
 .btn-new-chat:hover { 
   background-color: var(--accent-color) !important; 
@@ -83,7 +90,7 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 }
 
 .nav-link-custom {
-  display: flex;
+  display: flex !important;
   align-items: center;
   gap: 12px;
   padding: 12px 15px;
@@ -98,17 +105,15 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 }
 .nav-link-custom i { font-size: 1.2rem; width: 24px; text-align: center; }
 
-/* Кнопка перемикання теми */
 .theme-switch-btn {
   cursor: pointer;
   font-size: 1.2rem;
   color: var(--text-secondary);
   transition: 0.3s;
 }
-.theme-switch-btn:hover { color: var(--accent-color); }
 
-/* === 4. КОНТЕНТНА ОБЛАСТЬ (ЧАТ, ІСТОРІЯ, САЙТИ) === */
-.chat-area, .history-content, .sites-container-fixed, .sites-area {
+/* === 4. КОНТЕНТНА ОБЛАСТЬ ТА ВНУТРІШНЯ ШАПКА === */
+.chat-area, .history-content, .sites-container-fixed {
   margin-left: var(--sidebar-width);
   height: 100vh;
   display: flex;
@@ -119,10 +124,27 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 }
 
 /* Коли меню сховане */
-.chat-area.expanded, .history-content.expanded, .sites-container-fixed.expanded, .sites-area.expanded {
+.chat-area.expanded, .history-content.expanded, .sites-container-fixed.expanded {
   margin-left: 0;
 }
 
+.content-header {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  background-color: var(--header-bg) !important;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.scroll-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 20px 40px; /* Зменшений відступ зверху, щоб підняти заголовок */
+}
+
+/* === 5. ПОВІДОМЛЕННЯ ТА ВВІД === */
 .messages-container {
   flex-grow: 1;
   overflow-y: auto;
@@ -144,17 +166,12 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 .message.user { background-color: var(--user-msg-bg); align-self: flex-end; border-bottom-right-radius: 4px; }
 .message.bot { background-color: var(--bot-msg-bg); border: 1px solid rgba(138, 79, 255, 0.3); align-self: flex-start; border-bottom-left-radius: 4px; }
 
-/* === 5. ПАНЕЛЬ ВВОДУ === */
 .input-area {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: absolute; bottom: 0; left: 0; right: 0;
   padding: 20px 30px 30px 30px;
   background-color: var(--bg-color);
   border-top: 1px solid var(--border-color);
   z-index: 10;
-  transition: background-color 0.3s;
 }
 
 .custom-input {
@@ -169,42 +186,26 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   min-height: 54px;
   overflow-y: auto;
   line-height: 1.5;
-  font-size: 1rem;
 }
-.custom-input::placeholder { 
-  color: var(--placeholder-color) !important; 
-  opacity: 1 !important; 
-}
+.custom-input::placeholder { color: var(--placeholder-color) !important; opacity: 1 !important; }
 
 /* Кнопка скріпки */
 .btn-attach {
   background-color: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  min-width: 54px;
-  height: 54px;
+  min-width: 54px; height: 54px;
   color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  transition: 0.3s;
-  cursor: pointer;
-}
-.btn-attach:hover {
-  color: var(--accent-color);
-  border-color: var(--accent-color);
-  background: rgba(138, 79, 255, 0.05);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; cursor: pointer; transition: 0.3s;
 }
 
 .btn-send {
   background-color: var(--accent-color);
   border: none;
   border-radius: 12px;
-  min-width: 54px;
-  height: 54px;
-  color: white;
-  align-self: flex-end;
+  min-width: 54px; height: 54px;
+  color: white; align-self: flex-end;
 }
 
 /* === 6. АВАТАР (GLASSMORPHISM) === */
@@ -238,6 +239,10 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   transform: translateY(-5px) scale(1.01);
 }
 
+[data-theme="light"] .avatar-fixed {
+  background: rgba(255, 255, 255, 0.7);
+}
+
 video#avatar-video {
   width: 100%;
   height: auto;
@@ -263,14 +268,7 @@ video#avatar-video {
 .emotion-label { text-align: center; margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary); }
 .emotion-value { color: var(--accent-color); font-weight: 700; }
 
-/* === 7. СТОРІНКА ІСТОРІЇ ТА САЙТІВ (КАРТКИ) === */
-.history-list-scroll {
-  flex-grow: 1;
-  overflow-y: auto;
-  margin-top: 30px;
-  padding-right: 10px;
-}
-
+/* === 7. КАРТКИ (ІСТОРІЯ/САЙТИ) === */
 .chat-card, .site-card {
   background-color: var(--sidebar-bg);
   border: 1px solid var(--border-color);
@@ -280,31 +278,46 @@ video#avatar-video {
   display: flex;
   transition: all 0.3s ease;
   color: inherit;
-  text-decoration: none;
+  text-decoration: none !important;
 }
 
 .chat-card { justify-content: space-between; align-items: center; cursor: pointer; }
 .chat-card:hover {
   border-color: var(--accent-color);
-  background-color: rgba(138, 79, 255, 0.05);
+  background: rgba(138, 79, 255, 0.05);
   transform: translateX(5px);
 }
 
-.site-card {
-  text-align: center;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 100%;
-}
-.site-card:hover {
-  transform: translateY(-8px);
-  border-color: var(--accent-color);
-  box-shadow: 0 10px 25px rgba(138, 79, 255, 0.2);
-}
+.chat-actions { display: flex; gap: 10px; }
+.action-btn { background: transparent; border: none; color: var(--text-secondary); font-size: 1.1rem; transition: 0.2s; padding: 5px; }
+.action-btn:hover { color: var(--accent-color); }
 
+.site-card { text-align: center; flex-direction: column; justify-content: space-between; height: 100%; }
+.site-card:hover { transform: translateY(-8px); border-color: var(--accent-color); box-shadow: 0 10px 25px rgba(138, 79, 255, 0.2); }
 .site-icon { font-size: 3rem; color: var(--accent-color); margin-bottom: 20px; }
 
-/* === 8. МОДАЛЬНІ ВІКНА === */
+/* === 8. AUTH PAGE (LOGIN/REGISTER) === */
+.auth-container {
+  height: 100vh; display: flex; align-items: center; justify-content: center;
+  background-color: var(--bg-color);
+}
+.auth-card {
+  background-color: var(--sidebar-bg); padding: 2.5rem; border-radius: 24px;
+  width: 100%; max-width: 420px; border: 1px solid var(--border-color);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4); text-align: center;
+}
+.btn-auth {
+  background-color: var(--accent-color); color: white; padding: 14px;
+  font-weight: 600; border: none; border-radius: 12px; margin-top: 15px;
+  width: 100%; transition: 0.2s;
+}
+.btn-auth:hover { background-color: var(--accent-hover); }
+.error-feedback {
+  color: #ff5f5f; font-size: 0.8rem; margin-top: 4px; text-align: left; display: none;
+}
+.is-invalid { border-color: #ff5f5f !important; }
+
+/* === 9. МОДАЛЬНІ ВІКНА === */
 .modal-content {
   background-color: var(--sidebar-bg) !important;
   color: var(--text-primary) !important;
@@ -313,17 +326,12 @@ video#avatar-video {
 }
 .modal-header, .modal-footer { border-color: var(--border-color) !important; }
 
-/* === 9. ІНШЕ === */
+/* === 10. ІНШЕ === */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; } }
-
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: #555; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
 
-/* === 10. АДАПТИВНІСТЬ === */
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
-  .sidebar.mobile-open { transform: translateX(0); }
-  .chat-area, .history-content, .sites-container-fixed, .sites-area { margin-left: 0 !important; }
-  .avatar-fixed { width: 140px; bottom: 100px; right: 15px; }
+  .chat-area, .history-content, .sites-container-fixed { margin-left: 0 !important; }
 }
