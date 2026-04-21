@@ -88,7 +88,7 @@
     async function loadLinks() {
         const grid = document.getElementById("sitesGrid");
         try {
-            const res = await fetch("http://localhost:8000/api/links");
+            const res = await fetch("/api/links");
             const links = await res.json();
             grid.innerHTML = "";
             

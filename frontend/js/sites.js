@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8000/api/links"; // змінити на адресу бекенду
+const API_URL = "/api/links"; // відносний шлях для роботи через Docker/IP
 
 const grid = document.getElementById("sitesGrid");
 const emptyMessage = document.getElementById("emptyMessage");

@@ -1,5 +1,5 @@
 window.addEventListener("DOMContentLoaded", async () => {
-    const API_BASE_URL = "http://localhost:8000/api";
+    const API_BASE_URL = "/api";
     
     // Елементи DOM
     const sidebar = document.getElementById("sidebar");

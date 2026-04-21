@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from assistant_core.chat import ChatServiceError, ChatSessionNotFound, process_chat
+
+from ..auth.deps import get_current_user
 from ..db.mongodb import get_database
 from ..models import faq as faq_model
 from ..schemas import faq as faq_schema
@@ -45,7 +47,13 @@ class ChatResponse(BaseModel):
     title: str
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_with_faq(request: ChatRequest, db=Depends(get_database)):
+async def chat_with_faq(
+    request: ChatRequest,
+    db=Depends(get_database),
+    current_user=Depends(get_current_user),
+):
+    if request.userId != current_user.get("id") and request.userId != current_user.get("_id"):
+        raise HTTPException(status_code=403, detail="Не можна вести переписку від імені іншого користувача")
     try:
         result = await process_chat(db=db, message=request.message, session_id=request.sessionId)
     except ChatSessionNotFound:
