@@ -85,6 +85,31 @@
             margin-bottom: 15px;
         }
 
+        /* Аватар: круг обрізається в обгортці; кільце — box-shadow (без «зубців» як у border на img) */
+        .auth-avatar-ring {
+            width: 88px;
+            height: 88px;
+            margin: 0 auto 1rem;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow:
+                0 0 0 2px rgba(138, 79, 255, 0.88),
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 10px 28px rgba(0, 0, 0, 0.42);
+            background: linear-gradient(145deg, #2a2540 0%, #1a1828 100%);
+        }
+        .auth-avatar-ring img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: center center;
+            display: block;
+            transform: translateZ(0);
+            transform-origin: center center;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+
         .auth-divider {
             display: flex;
             align-items: center;
@@ -151,7 +176,16 @@
 <body>
 
 <div class="auth-card">
-    <img src="/static/images/avatar1.png" alt="Avatar" class="rounded-circle mb-3" width="80" height="80" style="border: 2px solid var(--accent-color); padding: 3px;">
+    <div class="auth-avatar-ring" aria-hidden="true">
+        <img
+            src="/static/images/avatar1.png"
+            alt=""
+            width="176"
+            height="176"
+            decoding="async"
+            fetchpriority="low"
+        >
+    </div>
     
     <h2 id="form-title" class="mb-4 fw-bold text-white">Вхід</h2>
 
