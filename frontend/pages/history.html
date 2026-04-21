@@ -9,7 +9,7 @@
     </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=9">
     <style>
         body { display: flex; height: 100vh; background-color: var(--bg-color); margin: 0; }
         
@@ -60,7 +60,6 @@
             <i class="bi bi-robot fs-4" style="color: var(--accent-color);"></i>
             <span class="fw-bold">KPI Helper</span>
         </div>
-        <div id="theme-toggle" class="theme-switch-btn"><i class="bi bi-moon-stars-fill" id="theme-icon"></i></div>
     </div>
     <div class="px-3">
         <!-- ВИПРАВЛЕНО: Кнопка тепер така сама, як у чаті -->
@@ -72,8 +71,68 @@
             <a href="/history" class="nav-link-custom active"><i class="bi bi-clock-history"></i> <span>Історія</span></a>
         </div>
     </div>
-    <div class="mt-auto p-3 border-top border-secondary">
-        <a href="#" class="nav-link-custom" data-bs-toggle="modal" data-bs-target="#logoutModal"><i class="bi bi-box-arrow-left"></i> <span>Вийти</span></a>
+    <div class="sidebar-footer mt-auto border-top border-secondary">
+        <div class="sidebar-account-wrap" id="sidebar-account-wrap">
+            <button
+                type="button"
+                class="sidebar-account-btn"
+                id="sidebar-account-btn"
+                aria-expanded="false"
+                aria-haspopup="true"
+                aria-controls="sidebar-account-dropdown"
+            >
+                <span class="sidebar-account-avatar-wrap">
+                    <img
+                        id="sidebar-user-photo"
+                        class="sidebar-user-photo"
+                        alt=""
+                        width="40"
+                        height="40"
+                        hidden
+                        decoding="async"
+                        referrerpolicy="no-referrer"
+                    >
+                    <span id="sidebar-user-avatar" class="sidebar-user-avatar" aria-hidden="true">?</span>
+                </span>
+                <span class="sidebar-account-text">
+                    <span class="sidebar-user-name" id="sidebar-user-name">—</span>
+                    <span class="sidebar-user-email" id="sidebar-user-email">—</span>
+                </span>
+                <i class="bi bi-chevron-up sidebar-account-chevron" aria-hidden="true"></i>
+            </button>
+            <div id="sidebar-account-dropdown" class="sidebar-account-dropdown" role="menu" hidden>
+                <div class="sidebar-account-theme-slot" id="sidebar-theme-slot">
+                    <button
+                        type="button"
+                        class="sidebar-account-main-row"
+                        id="sidebar-theme-menu-trigger"
+                        aria-expanded="false"
+                        aria-haspopup="true"
+                        aria-controls="sidebar-theme-flyout"
+                    >
+                        <span class="sidebar-account-main-icon" aria-hidden="true"><i class="bi bi-circle-half"></i></span>
+                        <span class="sidebar-account-main-label">Тема</span>
+                        <i class="bi bi-chevron-right sidebar-account-main-chevron" aria-hidden="true"></i>
+                    </button>
+                    <div id="sidebar-theme-flyout" class="sidebar-account-theme-flyout" role="menu" hidden>
+                        <div class="sidebar-account-dropdown-heading">Тема</div>
+                        <button type="button" class="sidebar-account-theme-btn" role="menuitem" data-theme-pref="light">
+                            <i class="bi bi-sun-fill" aria-hidden="true"></i> Світла
+                        </button>
+                        <button type="button" class="sidebar-account-theme-btn" role="menuitem" data-theme-pref="dark">
+                            <i class="bi bi-moon-stars-fill" aria-hidden="true"></i> Темна
+                        </button>
+                        <button type="button" class="sidebar-account-theme-btn" role="menuitem" data-theme-pref="system">
+                            <i class="bi bi-display" aria-hidden="true"></i> Як у системі
+                        </button>
+                    </div>
+                </div>
+                <button type="button" class="sidebar-account-main-row" id="sidebar-dropdown-logout" role="menuitem">
+                    <span class="sidebar-account-main-icon" aria-hidden="true"><i class="bi bi-box-arrow-right"></i></span>
+                    <span class="sidebar-account-main-label">Вийти</span>
+                </button>
+            </div>
+        </div>
     </div>
 </nav>
 
@@ -143,7 +202,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="/static/js/chat.js"></script>
+<script src="/static/js/chat.js?v=9"></script>
 <script>
     let currentSessionId = null;
 

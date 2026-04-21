@@ -180,6 +180,7 @@ async def google_oauth_callback(
         return RedirectResponse(url="/auth?oauth_error=email_not_verified", status_code=302)
 
     name = (info.get("name") or "").strip() or email.split("@", 1)[0]
+    g_picture = (info.get("picture") or "").strip() or None
 
     user_raw = await user_model.get_user_by_email(db, email)
     if user_raw:
@@ -206,6 +207,12 @@ async def google_oauth_callback(
             return RedirectResponse(
                 url="/auth?oauth_error=create_failed", status_code=302
             )
+
+    if g_picture and user_raw and user_raw.get("picture") != g_picture:
+        await user_model.update_user(
+            db, str(user_raw["_id"]), {"picture": g_picture}
+        )
+        user_raw = await user_model.get_user_by_email(db, email)
 
     user = user_model.serialize_user(user_raw)
     access_token = create_access_token(data={"sub": user["id"], "email": user["email"]})
