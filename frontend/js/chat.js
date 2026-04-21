@@ -261,6 +261,46 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    /** Людський заголовок для картки посилання з URL. */
+    function linkTitleFromUrl(url) {
+        try {
+            const u = new URL(url);
+            const h = u.hostname.replace(/^www\./i, "");
+            const mGurt =
+                u.pathname.match(/\/gurt(\d+)\/?/i) ||
+                u.pathname.match(/gurt(\d+)/i);
+            if (mGurt && /studmisto\.kpi\.ua$/i.test(h)) {
+                return `Гуртожиток №${mGurt[1]}`;
+            }
+            if (/rozklad\.kpi\.ua$/i.test(h)) return "Розклад занять (КПІ)";
+            if (/studmisto\.kpi\.ua$/i.test(h)) return "Студмістечко КПІ";
+            if (/kpi\.ua$/i.test(h)) {
+                return h.replace(".kpi.ua", "").replace(/^./, (c) => c.toUpperCase()) + " — КПІ";
+            }
+            return h;
+        } catch {
+            return "";
+        }
+    }
+
+    function pickLinkCardTitle(url, chatTitle) {
+        const fromUrl = linkTitleFromUrl(url);
+        if (fromUrl && /гуртожиток|студмістечко|розклад/i.test(fromUrl)) {
+            return fromUrl;
+        }
+        const t = (chatTitle || "").trim();
+        if (t && t !== "Без назви" && t.length < 72) return t;
+        return fromUrl || "Відкрити джерело";
+    }
+
+    function linkCardIconClass(url) {
+        const u = (url || "").toLowerCase();
+        if (u.includes("gurt")) return "bi bi-house-door-fill";
+        if (u.includes("rozklad")) return "bi bi-calendar3";
+        if (u.includes("studmisto")) return "bi bi-building";
+        return "bi bi-link-45deg";
+    }
+
     /** Повідомлення асистента: текст, опційно посилання (окремо від тексту). */
     function appendAssistantMessage(msg) {
         const wrap = document.createElement("div");
@@ -279,27 +319,33 @@ window.addEventListener("DOMContentLoaded", async () => {
             card.target = "_blank";
             card.rel = "noopener noreferrer";
             card.className = "bot-message-link-card";
-            card.setAttribute("title", linkVal);
+            card.setAttribute("title", `Відкрити: ${linkVal}`);
 
-            const lead = document.createElement("span");
-            lead.className = "bot-message-link-leading";
-            lead.setAttribute("aria-hidden", "true");
+            const iconCell = document.createElement("span");
+            iconCell.className = "bot-message-link-icon-cell";
+            iconCell.setAttribute("aria-hidden", "true");
             const linkIcon = document.createElement("i");
-            linkIcon.className = "bi bi-link-45deg";
-            lead.appendChild(linkIcon);
+            linkIcon.className = linkCardIconClass(linkVal);
+            iconCell.appendChild(linkIcon);
 
             const mid = document.createElement("span");
             mid.className = "bot-message-link-mid";
-            const main = document.createElement("span");
-            main.className = "bot-message-link-main";
-            main.textContent = host;
-            mid.appendChild(main);
-            if (rest) {
-                const sub = document.createElement("span");
-                sub.className = "bot-message-link-sub";
-                sub.textContent = rest;
-                mid.appendChild(sub);
-            }
+
+            const headline = document.createElement("span");
+            headline.className = "bot-message-link-headline";
+            headline.textContent = pickLinkCardTitle(linkVal, msg.title);
+
+            const kicker = document.createElement("span");
+            kicker.className = "bot-message-link-kicker";
+            kicker.textContent = "Офіційне джерело";
+
+            const urlLine = document.createElement("span");
+            urlLine.className = "bot-message-link-url-line";
+            urlLine.textContent = rest ? `${host}${rest}` : host;
+
+            mid.appendChild(headline);
+            mid.appendChild(kicker);
+            mid.appendChild(urlLine);
 
             const ext = document.createElement("span");
             ext.className = "bot-message-link-external";
@@ -308,7 +354,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             extIcon.className = "bi bi-box-arrow-up-right";
             ext.appendChild(extIcon);
 
-            card.appendChild(lead);
+            card.appendChild(iconCell);
             card.appendChild(mid);
             card.appendChild(ext);
             wrap.appendChild(card);
@@ -327,6 +373,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             appendAssistantMessage({
                 text: msg.text,
                 link: msg.link || "",
+                title: msg.title || "",
             });
             return;
         }
@@ -465,6 +512,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                     appendAssistantMessage({
                         text: ev.response || "",
                         link: ev.link || "",
+                        title: ev.title || "",
                     });
                     applyAvatarEmotion(ev);
                 }
