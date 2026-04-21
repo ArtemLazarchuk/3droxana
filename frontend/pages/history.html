@@ -147,15 +147,29 @@
 <script>
     let currentSessionId = null;
 
+    function authHeaders(extra = {}) {
+        const t = localStorage.getItem("access_token");
+        const h = { ...extra };
+        if (t) h.Authorization = "Bearer " + t;
+        return h;
+    }
+
     async function fetchHistory() {
         const container = document.getElementById('historyContent');
         try {
             const user = JSON.parse(localStorage.getItem("user"));
-            const res = await fetch(`/api/sessions/user/${user?._id?.$oid || user?._id}`);
+            const uid = user?._id?.$oid || user?._id || user?.id;
+            const res = await fetch(`/api/sessions/user/${uid}`, { headers: authHeaders() });
+            if (res.status === 401) {
+                window.location.href = "/auth";
+                return;
+            }
             const data = await res.json();
             container.innerHTML = '';
-            
-            if (!data.length) { document.getElementById('noChats').style.display = 'block'; return; }
+            if (!Array.isArray(data) || !data.length) {
+                document.getElementById('noChats').style.display = 'block';
+                return;
+            }
             document.getElementById('chatCount').textContent = `Діалогів: ${data.length}`;
             
             data.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)).forEach(s => {
@@ -196,7 +210,10 @@
     document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
         if (!currentSessionId) return;
         try {
-            const res = await fetch(`/api/sessions/${currentSessionId}`, { method: 'DELETE' });
+            const res = await fetch(`/api/sessions/${currentSessionId}`, {
+                method: 'DELETE',
+                headers: authHeaders(),
+            });
             if (res.ok) location.reload();
         } catch (e) { console.error(e); }
     });
@@ -207,7 +224,7 @@
         try {
             const res = await fetch(`/api/sessions/${currentSessionId}/rename`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ name: newName })
             });
             if (res.ok) location.reload();

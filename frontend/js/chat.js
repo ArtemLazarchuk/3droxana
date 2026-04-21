@@ -1,6 +1,16 @@
 window.addEventListener("DOMContentLoaded", async () => {
     const API_BASE_URL = "/api";
 
+    /** Заголовки для ендпоінтів з JWT (сесії тощо). Після логіну токен у localStorage. */
+    function authHeaders(base = {}) {
+        const token = localStorage.getItem("access_token");
+        const h = { ...base };
+        if (token) {
+            h.Authorization = `Bearer ${token}`;
+        }
+        return h;
+    }
+
     /** Показувати блок «посилання» лише для реального http(s) URL. */
     function isHttpUrl(s) {
         const t = (s || "").trim();
@@ -402,7 +412,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             try {
                 const res = await fetch(`${API_BASE_URL}/sessions`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: authHeaders({ "Content-Type": "application/json" }),
                     body: JSON.stringify({
                         userId: userId,
                         name: "Новий чат",
@@ -411,6 +421,10 @@ window.addEventListener("DOMContentLoaded", async () => {
                         updatedAt: new Date().toISOString()
                     }),
                 });
+                if (res.status === 401) {
+                    window.location.href = "/auth";
+                    return;
+                }
                 if (res.ok) {
                     const rawId = await res.text();
                     sessionId = rawId.replace(/^"|"$/g, '');
@@ -419,13 +433,33 @@ window.addEventListener("DOMContentLoaded", async () => {
             } catch (e) { console.error("Помилка створення початкової сесії", e); }
         }
 
+        if (!sessionId || sessionId === "null" || sessionId === "undefined") {
+            messagesContainer.innerHTML = "";
+            appendMessage(
+                "bot",
+                "Не вдалося відкрити чат (немає сесії). Увійдіть знову або натисніть «Новий чат»."
+            );
+            return;
+        }
+
         // Завантажуємо повідомлення
         try {
-            const msgRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
+            const msgRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+                headers: authHeaders(),
+            });
+            if (msgRes.status === 401) {
+                window.location.href = "/auth";
+                return;
+            }
+            if (msgRes.status === 404) {
+                localStorage.removeItem("sessionId");
+                await initSession();
+                return;
+            }
             if (msgRes.ok) {
                 const sessionData = await msgRes.json();
-                messagesContainer.innerHTML = ''; 
-                
+                messagesContainer.innerHTML = "";
+
                 if (sessionData.messages && sessionData.messages.length > 0) {
                     sessionData.messages.forEach(renderHistoryMessage);
                 } else {
@@ -434,6 +468,12 @@ window.addEventListener("DOMContentLoaded", async () => {
                         `Привіт, ${user.username || "студенте"}! Чим можу допомогти?`
                     );
                 }
+            } else {
+                messagesContainer.innerHTML = "";
+                appendMessage(
+                    "bot",
+                    "Не вдалося завантажити історію чату. Спробуйте вийти й увійти знову."
+                );
             }
         } catch (e) { 
             console.error("Помилка завантаження повідомлень", e);
@@ -785,7 +825,17 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (!userId) { window.location.href = "/auth"; return; }
         e.preventDefault();
         try {
-            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, name: "Новий чат", messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) });
+            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, {
+                method: "POST",
+                headers: authHeaders({ "Content-Type": "application/json" }),
+                body: JSON.stringify({
+                    userId,
+                    name: "Новий чат",
+                    messages: [],
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                }),
+            });
             if (res.ok) { const id = await res.text(); localStorage.setItem("sessionId", id.replace(/^"|"$/g, '')); window.location.href = "/chat"; }
         } catch (e) { console.error(e); }
     });
