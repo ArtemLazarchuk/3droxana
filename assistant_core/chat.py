@@ -37,6 +37,10 @@ ALLOWED_EMOTIONS: FrozenSet[str] = frozenset(
     {"neutral", "happy", "sad", "surprise", "thinking"}
 )
 
+# Назва сесії в списку «Історія»; поки лишається так — підставляємо тему з першої відповіді моделі.
+_SESSION_NAME_DEFAULTS: FrozenSet[str] = frozenset({"Новий чат", "Без назви", ""})
+_SESSION_NAME_MAX_LEN = 100
+
 # Спочатку «основний текст» — щоб при streaming користувач бачив відповідь раніше за службові поля.
 SYSTEM_PROMPT = (
     "Ти — чат-асистент для студентів КПІ: спокійний, чемний, по суті. "
@@ -218,6 +222,21 @@ async def append_assistant_message(
     )
     if update_result.modified_count == 0:
         raise ChatSessionNotFound("Сесія не знайдена")
+
+    topic = (assistant_title or "").strip()
+    if topic and topic not in _SESSION_NAME_DEFAULTS:
+        short = topic[:_SESSION_NAME_MAX_LEN].rstrip()
+        if short:
+            await db["sessions"].update_one(
+                {
+                    "_id": ObjectId(session_id),
+                    "$or": [
+                        {"name": {"$in": list(_SESSION_NAME_DEFAULTS)}},
+                        {"name": {"$exists": False}},
+                    ],
+                },
+                {"$set": {"name": short}},
+            )
 
 
 async def append_messages_to_session(
