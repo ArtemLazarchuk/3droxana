@@ -1,33 +1,33 @@
 <!DOCTYPE html>
-<html lang="uk" data-bs-theme="dark">
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Сайти КПІ | KPI Assistant</title>
+    <!-- Ця сторінка публічна, тому редиректу немає -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .site-card { background-color: var(--sidebar-bg); border: 1px solid #333; transition: 0.2s; height: 100%; }
-        .site-card:hover { transform: translateY(-5px); border-color: var(--accent-color); }
-    </style>
 </head>
-<body>
+<body data-theme="dark">
 
+<!-- 1. САЙДБАР -->
 <nav class="sidebar" id="sidebar">
-    <div class="p-3 d-flex align-items-center gap-2 text-white">
-        <i class="bi bi-robot fs-4" style="color: var(--accent-color);"></i>
-        <span class="fw-bold">KPI Helper</span>
+    <div class="p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-robot fs-4" style="color: var(--accent-color);"></i>
+            <span class="fw-bold">KPI Helper</span>
+        </div>
+        <div id="theme-toggle" class="theme-switch-btn" title="Змінити тему">
+            <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
+        </div>
     </div>
 
     <div class="px-3">
-        <a href="/chat" class="btn btn-new-chat w-100 text-start btn-sm mb-3 text-decoration-none">
-            <i class="bi bi-plus-lg me-2"></i> Новий чат
-        </a>
-
-        <small class="text-uppercase text-secondary fw-bold mb-2 d-block" style="font-size: 0.7rem;">Навігація</small>
+        <!-- Уніфікована кнопка Новий чат -->
+        <button id="new-chat-btn" class="btn btn-new-chat">+ Новий чат</button>
+        
         <div class="d-flex flex-column">
-            <a href="/" class="nav-link-custom"><i class="bi bi-house"></i> <span>Головна</span></a>
             <a href="/chat" class="nav-link-custom"><i class="bi bi-chat-dots"></i> <span>Чат</span></a>
             <a href="/sites" class="nav-link-custom active"><i class="bi bi-globe"></i> <span>Сайти КПІ</span></a>
             <a href="/history" class="nav-link-custom"><i class="bi bi-clock-history"></i> <span>Історія</span></a>
@@ -35,40 +35,108 @@
     </div>
 
     <div class="mt-auto p-3 border-top border-secondary">
-        <a href="/auth" class="nav-link-custom logout-btn"><i class="bi bi-box-arrow-left"></i> <span>Вийти</span></a>
+        <!-- Кнопка змінюється на Увійти/Вийти через JS -->
+        <a href="#" class="nav-link-custom" id="auth-trigger-btn" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            <i class="bi bi-box-arrow-left"></i> <span id="auth-btn-text">Вийти</span>
+        </a>
     </div>
 </nav>
 
-<main class="chat-area p-4" id="main-content" style="overflow-y: auto;">
-    <h2 class="text-white mb-4 fw-bold">Корисні ресурси</h2>
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="sitesGrid"></div>
-    <div id="emptyMessage" class="text-center text-secondary mt-5" style="display: none;">Список сайтів порожній.</div>
+<!-- 2. ОСНОВНИЙ КОНТЕНТ -->
+<main class="sites-container-fixed" id="main-content">
+    <header class="content-header">
+        <button id="sidebar-toggle" class="btn text-secondary me-3">
+            <i class="bi bi-layout-sidebar"></i>
+        </button>
+        <span class="fw-bold">Корисні ресурси</span>
+    </header>
+    
+    <div class="scroll-content">
+        <h1 class="fw-bold mb-5">Корисні ресурси КПІ</h1>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="sitesGrid">
+            <!-- Сюди завантажуються картки -->
+            <div class="text-center w-100 mt-5">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+        </div>
+        <div id="noSites" class="text-center text-secondary mt-5" style="display: none;">
+            Ресурсів не знайдено
+        </div>
+    </div>
 </main>
 
-<script>
-    const API_URL = "/api/links"; 
-    const grid = document.getElementById("sitesGrid");
+<!-- МОДАЛКА ВИХОДУ -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-secondary">
+          <h5 class="modal-title">Підтвердження</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">Ви впевнені, що хочете вийти з акаунту?</div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+        <button type="button" class="btn btn-danger px-4" id="confirmLogout">Вийти</button>
+      </div>
+    </div>
+  </div>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/chat.js"></script>
+<script>
     async function loadLinks() {
+        const grid = document.getElementById("sitesGrid");
         try {
-            const res = await fetch(API_URL);
+            const res = await fetch("/api/links");
             const links = await res.json();
             grid.innerHTML = "";
+            
+            if (!links || links.length === 0) {
+                document.getElementById('noSites').style.display = 'block';
+                return;
+            }
+
             links.forEach(link => {
                 const col = document.createElement("div");
                 col.className = "col";
                 col.innerHTML = `
-                    <div class="card site-card p-4 text-center">
-                        <i class="bi bi-browser-chrome mb-3" style="font-size: 2.5rem; color: var(--accent-color);"></i>
-                        <h5 class="text-white fw-bold">${link.title}</h5>
-                        <p class="text-secondary small flex-grow-1">${link.description || ""}</p>
-                        <a href="${link.url}" target="_blank" class="btn btn-primary w-100" style="background-color: var(--accent-color); border: none;">Відвідати <i class="bi bi-box-arrow-up-right ms-2"></i></a>
-                    </div>`;
+                    <div class="site-card">
+                        <div>
+                            <div class="site-icon"><i class="bi bi-browser-chrome"></i></div>
+                            <h5 class="fw-bold">${link.title}</h5>
+                            <p class="text-secondary small">${link.description || "Ресурс для студентів та викладачів."}</p>
+                        </div>
+                        <a href="${link.url}" target="_blank" class="btn btn-primary fw-bold" 
+                           style="background-color: var(--accent-color); border:none; padding: 12px; border-radius: 10px;">
+                           Відвідати <i class="bi bi-box-arrow-up-right ms-1"></i>
+                        </a>
+                    </div>
+                `;
                 grid.appendChild(col);
             });
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            grid.innerHTML = "<p class='text-center w-100 text-danger'>Помилка завантаження даних.</p>";
+        }
     }
-    loadLinks();
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const user = localStorage.getItem("user");
+        const authBtn = document.getElementById("auth-trigger-btn");
+        const authText = document.getElementById("auth-btn-text");
+        const newChatBtn = document.getElementById("new-chat-btn");
+
+        if (!user) {
+            authText.innerText = "Увійти";
+            authBtn.querySelector('i').className = "bi bi-box-arrow-in-right";
+            authBtn.removeAttribute("data-bs-toggle");
+            authBtn.href = "/auth";
+            if(newChatBtn) newChatBtn.style.display = "none";
+        } else {
+            if(newChatBtn) newChatBtn.style.display = "flex";
+        }
+        loadLinks();
+    });
 </script>
 </body>
 </html>

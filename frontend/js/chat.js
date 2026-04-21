@@ -179,7 +179,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
     const newChatBtn = document.getElementById("new-chat-btn");
-    const avatarBox = document.querySelector('.avatar-fixed'); // Блок для підсвітки
+    const avatarBox = document.querySelector('.avatar-fixed');
+    const resizeHandle = document.querySelector('.resize-handle');
+    const themeToggle = document.getElementById("theme-toggle");
+    const confirmLogout = document.getElementById("confirmLogout");
 
     function applyAvatarEmotion(data) {
         if (avatarBox) {
@@ -225,12 +228,18 @@ window.addEventListener("DOMContentLoaded", async () => {
     const user = JSON.parse(localStorage.getItem("user"));
     const userId = user?._id?.$oid || user?._id || null;
 
-    if (!user) {
-        window.location.href = "/auth";
-        return;
+    // --- 1. ТЕМА ---
+    function applyTheme(t) {
+        document.body.setAttribute("data-theme", t); localStorage.setItem("theme", t);
+        const i = document.getElementById("theme-icon"); if (i) i.className = t === "light" ? "bi bi-sun-fill" : "bi bi-moon-stars-fill";
     }
+    applyTheme(localStorage.getItem("theme") || "dark");
+    themeToggle?.addEventListener("click", () => applyTheme(document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"));
 
-    // Тогл меню (Sidebar)
+    // --- 2. ВИХІД ---
+    confirmLogout?.addEventListener("click", () => { localStorage.clear(); window.location.href = "/"; });
+
+    // --- 3. ЗГОРТАННЯ МЕНЮ ---
     toggleBtn?.addEventListener("click", () => {
         sidebar.classList.toggle("collapsed");
         mainContent.classList.toggle("expanded");
@@ -760,42 +769,26 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // === НОВИЙ ЧАТ (РЕАЛІЗАЦІЯ ЧЕРЕЗ newSession) ===
+    // --- 5. DRAG & RESIZE АВАТАРА ---
+    if (avatarBox) {
+        let isDragging = false, isResizing = false, startX, startY, initialL, initialT, initialW;
+        resizeHandle?.addEventListener('mousedown', (e) => { e.stopPropagation(); isResizing = true; startX = e.clientX; initialW = avatarBox.offsetWidth; avatarBox.style.transition = 'none'; });
+        avatarBox.addEventListener('mousedown', (e) => { if (isResizing) return; isDragging = true; avatarBox.style.transition = 'none'; const r = avatarBox.getBoundingClientRect(); initialL = r.left; initialT = r.top; startX = e.clientX; startY = e.clientY; avatarBox.style.top = initialT+'px'; avatarBox.style.left = initialL+'px'; avatarBox.style.bottom = 'auto'; avatarBox.style.right = 'auto'; });
+        document.addEventListener('mousemove', (e) => {
+            if (isResizing) { const w = initialW + (e.clientX - startX); if (w >= 150 && w <= 450) avatarBox.style.width = w + 'px'; }
+            else if (isDragging) { avatarBox.style.left = (initialL + (e.clientX - startX)) + 'px'; avatarBox.style.top = (initialT + (e.clientY - startY)) + 'px'; }
+        });
+        document.addEventListener('mouseup', () => { isDragging = false; isResizing = false; avatarBox.style.transition = 'box-shadow 0.4s ease, border-color 0.4s ease, transform 0.3s'; });
+    }
+
     newChatBtn?.addEventListener("click", async (e) => {
+        if (!userId) { window.location.href = "/auth"; return; }
         e.preventDefault();
         try {
-            // Звертаємось до твого спеціального ендпоінту
-            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    userId: userId,
-                    name: "new Чат з FAQ",
-                    messages: [],
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }),
-            });
-            
-            if (res.ok) {
-                const rawId = await res.text();
-                const newSessionId = rawId.replace(/^"|"$/g, '');
-                
-                // Оновлюємо ID в локальному сховищі
-                localStorage.setItem("sessionId", newSessionId);
-                
-                // Очищаємо екран і завантажуємо "чисту" сесію
-                messagesContainer.innerHTML = '';
-                await initSession(); 
-                console.log("Нову сесію створено успішно:", newSessionId);
-            } else {
-                console.error("Сервер не зміг створити нову сесію");
-            }
-        } catch (e) { 
-            console.error("Помилка при створенні нового чату:", e); 
-        }
+            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, name: "Новий чат", messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) });
+            if (res.ok) { const id = await res.text(); localStorage.setItem("sessionId", id.replace(/^"|"$/g, '')); window.location.href = "/chat"; }
+        } catch (e) { console.error(e); }
     });
 
-    // Запуск при завантаженні
-    initSession();
+    if (window.location.pathname.includes('chat')) initSession();
 });
