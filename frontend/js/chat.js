@@ -172,8 +172,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     const userInput = document.getElementById("user-input");
     const sendBtn = document.getElementById("send-btn");
     const attachBtn = document.getElementById("attach-btn");
+    const voiceBtn = document.getElementById("voice-btn");
     const fileInput = document.getElementById("file-input");
     let pendingFile = null;
+    let chatInFlight = false;
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
     const newChatBtn = document.getElementById("new-chat-btn");
@@ -449,11 +451,154 @@ window.addEventListener("DOMContentLoaded", async () => {
         syncAttachButton();
     });
 
-    // ВІДПРАВКА ПОВІДОМЛЕННЯ (SSE-потік)
-    let chatInFlight = false;
+    /** Голос: Web Speech API у браузері (Chrome / Edge / Safari). Без OpenAI і без відправки аудіо на ваш сервер. */
+    function getSpeechRecognitionCtor() {
+        return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    }
 
-    async function sendMessage() {
-        const textRaw = userInput.value.trim();
+    let speechRec = null;
+    let voiceListening = false;
+    let voiceExplicitStop = false;
+
+    function stopVoiceInput(options = {}) {
+        const sendAfter = options.sendAfter === true;
+        if (!speechRec && !voiceListening) {
+            if (sendAfter) {
+                const t = userInput.value.trim();
+                if (t) sendMessage(t);
+            }
+            return;
+        }
+        voiceExplicitStop = true;
+        voiceListening = false;
+        voiceBtn?.classList.remove("listening");
+        voiceBtn?.setAttribute("aria-pressed", "false");
+        const rec = speechRec;
+        speechRec = null;
+        if (rec) {
+            try {
+                rec.stop();
+            } catch (e) {
+                /* ignore */
+            }
+        }
+        if (sendAfter) {
+            const t = userInput.value.trim();
+            if (t) sendMessage(t);
+        }
+    }
+
+    function startVoiceInput() {
+        const Ctor = getSpeechRecognitionCtor();
+        if (!Ctor) {
+            appendMessage(
+                "bot",
+                "Голос у цьому браузері недоступний. Спробуйте **Google Chrome**, **Microsoft Edge** або **Safari** — розпізнавання йде в браузері, **OpenAI не використовується**."
+            );
+            return;
+        }
+        if (chatInFlight) return;
+
+        if (speechRec) {
+            try {
+                speechRec.stop();
+            } catch (e) {
+                /* ignore */
+            }
+            speechRec = null;
+        }
+
+        voiceExplicitStop = false;
+        voiceListening = true;
+        voiceBtn?.classList.add("listening");
+        voiceBtn?.setAttribute("aria-pressed", "true");
+
+        const rec = new Ctor();
+        speechRec = rec;
+        rec.lang = "uk-UA";
+        rec.continuous = true;
+        rec.interimResults = true;
+
+        let finalTranscript = "";
+        rec.onresult = (event) => {
+            let interim = "";
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const piece = event.results[i][0].transcript;
+                if (event.results[i].isFinal) finalTranscript += piece;
+                else interim += piece;
+            }
+            userInput.value = (finalTranscript + interim).trimStart();
+        };
+
+        rec.onerror = (event) => {
+            if (event.error === "aborted" || event.error === "no-speech") return;
+            voiceListening = false;
+            voiceBtn?.classList.remove("listening");
+            voiceBtn?.setAttribute("aria-pressed", "false");
+            speechRec = null;
+            const hint =
+                event.error === "not-allowed"
+                    ? "Дозвольте доступ до мікрофона для цього сайту в налаштуваннях браузера."
+                    : `Помилка розпізнавання (${event.error}).`;
+            appendMessage("bot", hint);
+        };
+
+        rec.onend = () => {
+            voiceBtn?.classList.remove("listening");
+            voiceBtn?.setAttribute("aria-pressed", "false");
+            speechRec = null;
+            const skipAuto = voiceExplicitStop;
+            voiceExplicitStop = false;
+            voiceListening = false;
+            if (skipAuto) return;
+            const t = userInput.value.trim();
+            if (t && !chatInFlight) sendMessage(t);
+        };
+
+        try {
+            rec.start();
+        } catch (err) {
+            voiceListening = false;
+            voiceBtn?.classList.remove("listening");
+            voiceBtn?.setAttribute("aria-pressed", "false");
+            speechRec = null;
+            console.warn("SpeechRecognition.start", err);
+            const extra =
+                typeof location !== "undefined" &&
+                location.protocol !== "https:" &&
+                location.hostname !== "localhost" &&
+                location.hostname !== "127.0.0.1"
+                    ? " Для голосу потрібен **HTTPS** (або localhost)."
+                    : "";
+            appendMessage(
+                "bot",
+                `Не вдалося увімкнути мікрофон (${String(err)}). Перевірте дозвіл на мікрофон у браузері.${extra}`
+            );
+        }
+    }
+
+    voiceBtn?.addEventListener("click", () => {
+        if (getSpeechRecognitionCtor() == null) {
+            appendMessage(
+                "bot",
+                "У **Firefox** немає Web Speech API для розпізнавання. Відкрийте чат у Chrome / Edge / Safari — голос обробляє **лише браузер**, без ключів на сервері."
+            );
+            return;
+        }
+        if (voiceListening) {
+            stopVoiceInput({ sendAfter: true });
+            return;
+        }
+        startVoiceInput();
+    });
+
+    // ВІДПРАВКА ПОВІДОМЛЕННЯ (SSE-потік)
+    async function sendMessage(overrideText) {
+        stopVoiceInput();
+        const textRaw =
+            typeof overrideText === "string"
+                ? overrideText.trim()
+                : userInput.value.trim();
         const sessionId = localStorage.getItem("sessionId");
         if ((!textRaw && !pendingFile) || !sessionId || chatInFlight) return;
 
@@ -472,6 +617,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         chatInFlight = true;
         if (sendBtn) sendBtn.disabled = true;
         if (attachBtn) attachBtn.disabled = true;
+        if (voiceBtn) voiceBtn.disabled = true;
         if (userInput) userInput.disabled = true;
 
         const thinkingEl = createThinkingBubble();
@@ -597,6 +743,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             chatInFlight = false;
             if (sendBtn) sendBtn.disabled = false;
             if (attachBtn) attachBtn.disabled = false;
+            if (voiceBtn) voiceBtn.disabled = false;
             if (userInput) userInput.disabled = false;
             if (emotionLabel && emotionLabel.textContent === "думає…") {
                 emotionLabel.textContent = "Очікування";

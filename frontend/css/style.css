@@ -327,13 +327,30 @@ body {
   width: 100%;
 }
 
+/* Кнопки біля поля: однаковий розмір, без розтягування на всю висоту рядка (align-items: stretch). */
+.input-area .btn-attach,
+.input-area .btn-voice,
+.input-area .btn-send {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
 .btn-attach {
   flex-shrink: 0;
   background-color: #3a3a45;
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  width: 44px;
-  min-height: 40px;
   color: #c8c8d4;
 }
 
@@ -347,12 +364,41 @@ body {
   border-color: rgba(138, 79, 255, 0.5);
 }
 
+.btn-voice {
+  flex-shrink: 0;
+  background-color: #3a3a45;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: #c8c8d4;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.btn-voice:hover {
+  color: #fff;
+  background-color: #48485a;
+}
+
+.btn-voice.listening {
+  color: #fff;
+  background-color: #6b21a8;
+  box-shadow: 0 0 0 2px rgba(138, 79, 255, 0.45);
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(138, 79, 255, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(138, 79, 255, 0.2);
+  }
+}
+
 .btn-send {
   background-color: var(--accent-color);
   border: none;
   border-radius: 10px;
-  width: 40px;
-  height: 40px;
   color: white;
 }
 
