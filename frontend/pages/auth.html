@@ -103,6 +103,7 @@
             <input type="password" class="form-control" id="signin-password" placeholder="Пароль" required>
             <div id="signin-pass-err" class="error-feedback"></div>
         </div>
+        <div id="signin-server-err" class="error-feedback" style="display: none;"></div>
         <button type="submit" class="btn btn-auth">Увійти</button>
     </form>
 
@@ -152,7 +153,16 @@
 
     function clearErrors() {
         document.querySelectorAll('.form-control').forEach(i => i.classList.remove('is-invalid'));
-        document.querySelectorAll('.error-feedback').forEach(d => d.style.display = 'none');
+        document.querySelectorAll('.error-feedback').forEach(d => { d.style.display = 'none'; d.textContent = ''; });
+    }
+
+    function detailToString(detail) {
+        if (detail == null) return '';
+        if (typeof detail === 'string') return detail;
+        if (Array.isArray(detail)) {
+            return detail.map((x) => (x && x.msg) || JSON.stringify(x)).join('; ');
+        }
+        return String(detail);
     }
 
     toggleLink.addEventListener("click", (e) => {
@@ -183,18 +193,48 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password }),
             });
-            const result = await response.json();
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (_) {
+                /* не JSON (рідко) */
+            }
+            const detailStr = detailToString(result.detail);
+
             if (response.ok) {
                 localStorage.setItem('user', JSON.stringify(result.user));
-                window.location.href = "/chat";
-            } else {
-                if (result.detail.includes("email") || result.detail.includes("found")) {
-                    showError("signin-email", "signin-email-err", "Користувача не знайдено");
-                } else {
-                    showError("signin-password", "signin-pass-err", "Неправильний пароль");
+                if (result.access_token) {
+                    localStorage.setItem('access_token', result.access_token);
                 }
+                window.location.href = "/chat";
+                return;
             }
-        } catch(err) { console.log(err); }
+
+            if (response.status >= 500) {
+                const serverEl = document.getElementById("signin-server-err");
+                if (serverEl) {
+                    serverEl.textContent =
+                        "Помилка на сервері під час входу (наприклад, застарілий формат пароля в базі). Спробуйте ще раз або зареєструйте новий акаунт. Деталі: "
+                        + (detailStr || response.statusText || "без опису");
+                    serverEl.style.display = "block";
+                }
+                return;
+            }
+
+            const low = detailStr.toLowerCase();
+            if (low.includes("email") || low.includes("found")) {
+                showError("signin-email", "signin-email-err", "Користувача не знайдено");
+            } else {
+                showError("signin-password", "signin-pass-err", detailStr || "Невірна пошта або пароль");
+            }
+        } catch (err) {
+            const serverEl = document.getElementById("signin-server-err");
+            if (serverEl) {
+                serverEl.textContent = "Немає зв'язку з сервером. Перевірте мережу та спробуйте ще раз.";
+                serverEl.style.display = "block";
+            }
+            console.error(err);
+        }
     });
 
     signUpForm.addEventListener("submit", async (e) => {

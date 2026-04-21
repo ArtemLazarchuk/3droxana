@@ -15,6 +15,33 @@
   --sidebar-width: 280px;
   --input-bg: #252525;
   --btn-new-chat-text: #ffffff;
+  /* Таблиці та картка посилання всередині бота (темна фаза) */
+  --chat-md-th-bg: rgba(20, 22, 32, 0.98);
+  --chat-md-td-bg: rgba(22, 24, 40, 0.92);
+  --chat-md-td-bg-alt: rgba(30, 32, 48, 0.92);
+  --chat-md-cell-border: #30363d;
+  --chat-link-card-bg-1: rgba(45, 38, 72, 0.95);
+  --chat-link-card-bg-2: rgba(22, 24, 40, 0.92);
+  --chat-link-card-border: rgba(138, 79, 255, 0.35);
+  --chat-link-card-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  --chat-link-icon-bg: rgba(138, 79, 255, 0.22);
+  --chat-link-icon-border: rgba(138, 79, 255, 0.4);
+  --chat-link-icon-color: #d4c4ff;
+  --chat-link-icon-hover-bg: rgba(138, 79, 255, 0.32);
+  --chat-link-icon-hover-color: #efe8ff;
+  --chat-link-headline: #f0e8ff;
+  --chat-link-kicker: rgba(180, 160, 255, 0.85);
+  --chat-link-url: #9dd5ff;
+  --chat-link-external: rgba(180, 190, 210, 0.65);
+  --chat-link-external-hover: #c4b5ff;
+  /* Кнопки вкладення / голос / надіслати (рядок вводу чату) */
+  --chat-toolbar-radius: 12px;
+  --chat-toolbar-btn-bg: #3a3a45;
+  --chat-toolbar-btn-bg-hover: #4d4d5c;
+  --chat-toolbar-btn-border: rgba(255, 255, 255, 0.1);
+  --chat-toolbar-btn-color: #d4d4de;
+  --chat-toolbar-btn-color-hover: #ffffff;
+  --chat-toolbar-send-border: rgba(255, 255, 255, 0.22);
 }
 
 [data-theme="light"] {
@@ -30,6 +57,32 @@
   --border-color: #dee2e6;
   --input-bg: #ffffff;
   --btn-new-chat-text: var(--accent-color);
+  /* Таблиці та картка посилання (світла фаза) */
+  --chat-md-th-bg: #e8eaf2;
+  --chat-md-td-bg: #ffffff;
+  --chat-md-td-bg-alt: #f3f5fa;
+  --chat-md-cell-border: #cfd6e0;
+  --chat-link-card-bg-1: #ffffff;
+  --chat-link-card-bg-2: #f6f2ff;
+  --chat-link-card-border: rgba(138, 79, 255, 0.22);
+  --chat-link-card-shadow: 0 4px 14px rgba(60, 40, 120, 0.1);
+  --chat-link-icon-bg: rgba(138, 79, 255, 0.12);
+  --chat-link-icon-border: rgba(138, 79, 255, 0.28);
+  --chat-link-icon-color: #5c3dc4;
+  --chat-link-icon-hover-bg: rgba(138, 79, 255, 0.18);
+  --chat-link-icon-hover-color: #4a2db0;
+  --chat-link-headline: #1a1530;
+  --chat-link-kicker: rgba(70, 55, 110, 0.72);
+  --chat-link-url: #0550ae;
+  --chat-link-external: rgba(60, 70, 95, 0.55);
+  --chat-link-external-hover: #5c3dc4;
+  --chat-toolbar-radius: 12px;
+  --chat-toolbar-btn-bg: #ffffff;
+  --chat-toolbar-btn-bg-hover: #eef1f6;
+  --chat-toolbar-btn-border: #dee2e6;
+  --chat-toolbar-btn-color: #5a616c;
+  --chat-toolbar-btn-color-hover: #1a1f2e;
+  --chat-toolbar-send-border: rgba(112, 56, 212, 0.45);
 }
 
 /* === 2. БАЗОВІ СТИЛІ === */
@@ -161,10 +214,21 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   margin-bottom: 20px;
   animation: fadeIn 0.3s ease;
   word-wrap: break-word;
+}
+/* pre-wrap лише для тексту користувача; для бота — HTML/Markdown інакше з’являються гігантські «відступи» */
+.message.user {
+  background-color: var(--user-msg-bg);
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
   white-space: pre-wrap;
 }
-.message.user { background-color: var(--user-msg-bg); align-self: flex-end; border-bottom-right-radius: 4px; }
-.message.bot { background-color: var(--bot-msg-bg); border: 1px solid rgba(138, 79, 255, 0.3); align-self: flex-start; border-bottom-left-radius: 4px; }
+.message.bot {
+  background-color: var(--bot-msg-bg);
+  border: 1px solid rgba(138, 79, 255, 0.3);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  white-space: normal;
+}
 
 /* GFM-стилі з github-markdown-dark.css; тут — вписування в бабл чату */
 .message.bot .markdown-body {
@@ -174,9 +238,18 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   padding: 0 !important;
   background: transparent !important;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--text-primary) !important;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+  overflow-x: auto;
+}
+/* GitHub Markdown CSS додає .markdown-body::before/::after { display:table } — ламає таблиці та дає «дірки» */
+.message.bot .markdown-body::before,
+.message.bot .markdown-body::after {
+  display: none !important;
+  content: none !important;
 }
 .message.bot .markdown-body > :first-child {
   margin-top: 0 !important;
@@ -184,15 +257,100 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 .message.bot .markdown-body > :last-child {
   margin-bottom: 0 !important;
 }
+.message.bot .markdown-body p {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+.message.bot .markdown-body p:first-child {
+  margin-top: 0;
+}
+.message.bot .markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.message.bot .markdown-body ul,
+.message.bot .markdown-body ol {
+  margin: 0.35em 0;
+  padding-left: 1.35em;
+}
+.message.bot .markdown-body li {
+  margin: 0.12em 0;
+}
+.message.bot .markdown-body li > p {
+  margin: 0.2em 0 !important;
+}
+.message.bot .markdown-body li > p:first-child {
+  margin-top: 0 !important;
+}
+.message.bot .markdown-body li > p:last-child {
+  margin-bottom: 0 !important;
+}
+/* Таблиці: fixed + рівномірні колонки; інакше max-content у вузькому баблі дає «1 літера в рядку» в першій колонці */
 .message.bot .markdown-body table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
+  display: table !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  margin: 0.35em 0 !important;
+  font-size: inherit;
+  line-height: 1.45;
+  overflow: visible !important;
+}
+.message.bot .markdown-body thead {
+  display: table-header-group !important;
+}
+.message.bot .markdown-body tbody {
+  display: table-row-group !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.message.bot .markdown-body thead + tbody {
+  margin-top: 0 !important;
+}
+.message.bot .markdown-body tr {
+  display: table-row !important;
 }
 .message.bot .markdown-body table th,
 .message.bot .markdown-body table td {
-  padding: 9px 14px;
-  vertical-align: top;
+  display: table-cell !important;
+  padding: 8px 12px !important;
+  vertical-align: top !important;
+  text-align: left !important;
+  border: 1px solid var(--chat-md-cell-border) !important;
+  color: var(--text-primary) !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+.message.bot .markdown-body table th {
+  font-weight: 600;
+}
+/* Перша колонка: за замовчуванням вузька (№, скорочення); для 2 колонок — окремо ширше */
+.message.bot .markdown-body table th:first-child,
+.message.bot .markdown-body table td:first-child {
+  min-width: 0 !important;
+  width: 5rem !important;
+  max-width: 6.75rem !important;
+}
+.message.bot .markdown-body table:has(thead tr th:nth-child(2):last-child) th:first-child,
+.message.bot .markdown-body table:has(thead tr th:nth-child(2):last-child) td:first-child {
+  min-width: 11.5rem !important;
+  width: 34% !important;
+  max-width: 48% !important;
+}
+.message.bot .markdown-body table th:not(:first-child),
+.message.bot .markdown-body table td:not(:first-child) {
+  width: auto !important;
+}
+/* Смугастість лише в tbody; кольори змінних — світла/темна тема */
+.message.bot .markdown-body table thead tr {
+  background-color: var(--chat-md-th-bg) !important;
+}
+.message.bot .markdown-body table tbody tr {
+  background-color: var(--chat-md-td-bg) !important;
+}
+.message.bot .markdown-body table tbody tr:nth-child(2n) {
+  background-color: var(--chat-md-td-bg-alt) !important;
 }
 .message.bot .markdown-body .katex-display {
   overflow-x: auto;
@@ -231,20 +389,20 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   max-width: 100%;
   box-sizing: border-box;
   text-decoration: none;
-  color: inherit;
+  color: var(--text-primary);
   outline: none;
   background: linear-gradient(
     145deg,
-    rgba(45, 38, 72, 0.95) 0%,
-    rgba(22, 24, 40, 0.92) 100%
+    var(--chat-link-card-bg-1) 0%,
+    var(--chat-link-card-bg-2) 100%
   );
-  border: 1px solid rgba(138, 79, 255, 0.35);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  border: 1px solid var(--chat-link-card-border);
+  box-shadow: var(--chat-link-card-shadow);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease, color 0.2s ease;
 }
 .message.bot a.bot-message-link-card:hover {
-  border-color: rgba(168, 130, 255, 0.65);
-  box-shadow: 0 6px 24px rgba(138, 79, 255, 0.2);
+  border-color: var(--accent-color);
+  box-shadow: 0 6px 20px rgba(138, 79, 255, 0.18);
   transform: translateY(-1px);
 }
 .message.bot a.bot-message-link-card:focus-visible {
@@ -259,14 +417,15 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(138, 79, 255, 0.22);
-  border: 1px solid rgba(138, 79, 255, 0.4);
-  color: #d4c4ff;
+  background: var(--chat-link-icon-bg);
+  border: 1px solid var(--chat-link-icon-border);
+  color: var(--chat-link-icon-color);
   font-size: 1.2rem;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 .message.bot a.bot-message-link-card:hover .bot-message-link-icon-cell {
-  background: rgba(138, 79, 255, 0.32);
-  color: #efe8ff;
+  background: var(--chat-link-icon-hover-bg);
+  color: var(--chat-link-icon-hover-color);
 }
 .message.bot .bot-message-link-mid {
   flex: 1;
@@ -279,7 +438,7 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   font-weight: 600;
   font-size: 1rem;
   line-height: 1.3;
-  color: #f0e8ff;
+  color: var(--chat-link-headline);
   letter-spacing: 0.01em;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -289,14 +448,14 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: rgba(180, 160, 255, 0.85);
+  color: var(--chat-link-kicker);
 }
 /* Один рядок: хост + шлях; довгі URL — з трьома крапками, без переносу посеред адреси */
 .message.bot .bot-message-link-url-line {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8rem;
   font-weight: 500;
-  color: #9dd5ff;
+  color: var(--chat-link-url);
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -307,13 +466,14 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 .message.bot .bot-message-link-external {
   flex-shrink: 0;
   align-self: center;
-  color: rgba(180, 190, 210, 0.65);
+  color: var(--chat-link-external);
   font-size: 1rem;
   padding: 4px;
   opacity: 0.9;
+  transition: color 0.2s ease;
 }
 .message.bot a.bot-message-link-card:hover .bot-message-link-external {
-  color: #c4b5ff;
+  color: var(--chat-link-external-hover);
   opacity: 1;
 }
 
@@ -349,7 +509,8 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary) !important;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
   opacity: 0.95;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body > :first-child {
@@ -358,15 +519,96 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 .message.bot.assistant-streaming .streaming-body.markdown-body > :last-child {
   margin-bottom: 0 !important;
 }
+.message.bot.assistant-streaming .streaming-body.markdown-body::before,
+.message.bot.assistant-streaming .streaming-body.markdown-body::after {
+  display: none !important;
+  content: none !important;
+}
 .message.bot.assistant-streaming .streaming-body.markdown-body table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
+  display: table !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  margin: 0.35em 0 !important;
+  font-size: inherit;
+  line-height: 1.45;
+  overflow: visible !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body thead {
+  display: table-header-group !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body tbody {
+  display: table-row-group !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body thead + tbody {
+  margin-top: 0 !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body tr {
+  display: table-row !important;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body table th,
 .message.bot.assistant-streaming .streaming-body.markdown-body table td {
-  padding: 9px 14px;
-  vertical-align: top;
+  display: table-cell !important;
+  padding: 8px 12px !important;
+  vertical-align: top !important;
+  text-align: left !important;
+  border: 1px solid var(--chat-md-cell-border) !important;
+  color: var(--text-primary) !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table th {
+  font-weight: 600;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table th:first-child,
+.message.bot.assistant-streaming .streaming-body.markdown-body table td:first-child {
+  min-width: 0 !important;
+  width: 5rem !important;
+  max-width: 6.75rem !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table:has(thead tr th:nth-child(2):last-child) th:first-child,
+.message.bot.assistant-streaming .streaming-body.markdown-body table:has(thead tr th:nth-child(2):last-child) td:first-child {
+  min-width: 11.5rem !important;
+  width: 34% !important;
+  max-width: 48% !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table th:not(:first-child),
+.message.bot.assistant-streaming .streaming-body.markdown-body table td:not(:first-child) {
+  width: auto !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table thead tr {
+  background-color: var(--chat-md-th-bg) !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table tbody tr {
+  background-color: var(--chat-md-td-bg) !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table tbody tr:nth-child(2n) {
+  background-color: var(--chat-md-td-bg-alt) !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body p {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body ul,
+.message.bot.assistant-streaming .streaming-body.markdown-body ol {
+  margin: 0.35em 0;
+  padding-left: 1.35em;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body li {
+  margin: 0.12em 0;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body li > p {
+  margin: 0.2em 0 !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body li > p:first-child {
+  margin-top: 0 !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body li > p:last-child {
+  margin-bottom: 0 !important;
 }
 
 /* === 5. ВВІД === */
@@ -376,6 +618,71 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   background-color: var(--bg-color);
   border-top: 1px solid var(--border-color);
   z-index: 10;
+}
+
+/* Видимий стан: файл обрано, очікує промпт / відправку */
+.pending-file-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(138, 79, 255, 0.4);
+  background: rgba(138, 79, 255, 0.1);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+.pending-file-bar[hidden] {
+  display: none !important;
+}
+.pending-file-bar-icon {
+  flex-shrink: 0;
+  color: var(--accent-color);
+  font-size: 1.15rem;
+  margin-top: 1px;
+}
+.pending-file-bar-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pending-file-bar-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+.pending-file-bar-name {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 600;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.pending-file-remove {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin: -2px -4px 0 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.pending-file-remove:hover {
+  background: rgba(138, 79, 255, 0.15);
+  color: var(--text-primary);
 }
 
 .custom-input {
@@ -393,71 +700,54 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 }
 .custom-input::placeholder { color: var(--placeholder-color) !important; opacity: 1 !important; }
 
-/* Кнопка скріпки */
-.btn-attach {
-  background-color: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  min-width: 54px; height: 54px;
-  color: var(--text-secondary);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.4rem; cursor: pointer; transition: 0.3s;
-}
-
-/* Кнопки біля поля: однаковий розмір, без розтягування на всю висоту рядка (align-items: stretch). */
+/* Кнопки рядка вводу чату: один розмір, один радіус, кольори від теми */
 .input-area .btn-attach,
 .input-area .btn-voice,
 .input-area .btn-send {
   flex: 0 0 44px;
   width: 44px;
   height: 44px;
-  min-height: 0;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   align-self: center;
+  border-radius: var(--chat-toolbar-radius);
+  font-size: 1.1rem;
+  line-height: 1;
   -webkit-appearance: none;
   appearance: none;
   cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease,
+    box-shadow 0.2s ease, transform 0.15s ease;
 }
 
-.btn-attach {
+.input-area .btn-attach,
+.input-area .btn-voice {
   flex-shrink: 0;
-  background-color: #3a3a45;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  color: #c8c8d4;
+  background-color: var(--chat-toolbar-btn-bg);
+  border: 1px solid var(--chat-toolbar-btn-border);
+  color: var(--chat-toolbar-btn-color);
 }
 
-.btn-attach:hover {
-  color: #fff;
-  background-color: #48485a;
+.input-area .btn-attach:hover,
+.input-area .btn-voice:hover {
+  background-color: var(--chat-toolbar-btn-bg-hover);
+  color: var(--chat-toolbar-btn-color-hover);
 }
 
-.btn-attach.has-file {
+.input-area .btn-attach.has-file {
   color: var(--accent-color);
-  border-color: rgba(138, 79, 255, 0.5);
+  border-color: rgba(138, 79, 255, 0.55);
 }
 
-.btn-voice {
-  flex-shrink: 0;
-  background-color: #3a3a45;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  color: #c8c8d4;
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-}
-
-.btn-voice:hover {
-  color: #fff;
-  background-color: #48485a;
-}
-
-.btn-voice.listening {
+.input-area .btn-voice.listening {
   color: #fff;
   background-color: #6b21a8;
+  border-color: rgba(168, 130, 255, 0.65);
   box-shadow: 0 0 0 2px rgba(138, 79, 255, 0.45);
   animation: voice-pulse 1.2s ease-in-out infinite;
 }
@@ -472,17 +762,39 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   }
 }
 
-.btn-send {
+.input-area .btn-send {
+  flex-shrink: 0;
   background-color: var(--accent-color);
-  border: none;
-  border-radius: 10px;
-  color: white;
+  border: 1px solid var(--chat-toolbar-send-border);
+  color: #fff;
+}
+
+.input-area .btn-send:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.input-area .btn-send:active {
+  transform: scale(0.96);
+}
+
+/* Під час стріму та сама кнопка — «Зупинити» */
+.input-area .btn-send.btn-send--stop {
+  background-color: #b83232;
+  border-color: rgba(255, 120, 120, 0.55);
+  color: #fff;
+}
+
+.input-area .btn-send.btn-send--stop:hover {
+  background-color: #d14343;
+  border-color: rgba(255, 160, 160, 0.65);
 }
 
 /* === 6. АВАТАР (GLASSMORPHISM) === */
 .avatar-fixed {
   position: fixed;
-  bottom: 40px;
+  /* Вище за старий 40px: відступ від низу залежить від висоти вікна, щоб не накладатися на поле вводу */
+  bottom: clamp(120px, 22vh, 300px);
   right: 30px;
   width: 240px;
   min-width: 150px;

@@ -1,6 +1,16 @@
 window.addEventListener("DOMContentLoaded", async () => {
     const API_BASE_URL = "/api";
 
+    /** Заголовки для ендпоінтів з JWT (сесії тощо). Після логіну токен у localStorage. */
+    function authHeaders(base = {}) {
+        const token = localStorage.getItem("access_token");
+        const h = { ...base };
+        if (token) {
+            h.Authorization = `Bearer ${token}`;
+        }
+        return h;
+    }
+
     /** Показувати блок «посилання» лише для реального http(s) URL. */
     function isHttpUrl(s) {
         const t = (s || "").trim();
@@ -175,13 +185,49 @@ window.addEventListener("DOMContentLoaded", async () => {
     const voiceBtn = document.getElementById("voice-btn");
     const fileInput = document.getElementById("file-input");
     let pendingFile = null;
+    const pendingFileBar = document.getElementById("pending-file-bar");
+    const pendingFileNameEl = document.getElementById("pending-file-name");
+    const pendingFileRemoveBtn = document.getElementById("pending-file-remove");
     let chatInFlight = false;
+    /** Скасування поточного SSE-запиту (кнопка «Зупинити»). */
+    let streamAbortController = null;
+
+    const SEND_BTN_ICON_HTML = '<i class="bi bi-send-fill"></i>';
+    const STOP_BTN_ICON_HTML = '<i class="bi bi-stop-fill"></i>';
+
+    function setSendButtonMode(mode) {
+        if (!sendBtn) return;
+        if (mode === "stop") {
+            sendBtn.classList.add("btn-send--stop");
+            sendBtn.innerHTML = STOP_BTN_ICON_HTML;
+            sendBtn.title = "Зупинити відповідь";
+            sendBtn.setAttribute("aria-label", "Зупинити генерацію відповіді");
+        } else {
+            sendBtn.classList.remove("btn-send--stop");
+            sendBtn.innerHTML = SEND_BTN_ICON_HTML;
+            sendBtn.title = "Надіслати";
+            sendBtn.setAttribute("aria-label", "Надіслати повідомлення");
+        }
+    }
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
     const newChatBtn = document.getElementById("new-chat-btn");
     const avatarBox = document.querySelector('.avatar-fixed');
     const resizeHandle = document.querySelector('.resize-handle');
     const themeToggle = document.getElementById("theme-toggle");
+
+    /** Дефолтна позиція аватара: над блоком вводу (після drag залишаються top/left — не чіпаємо). */
+    function syncAvatarDefaultBottom() {
+        if (!avatarBox) return;
+        if (avatarBox.style.top) return;
+        const inputBar = document.querySelector(".input-area");
+        if (!inputBar) return;
+        const gap = 20;
+        const h = inputBar.getBoundingClientRect().height;
+        avatarBox.style.bottom = `${Math.ceil(h + gap)}px`;
+    }
+    requestAnimationFrame(() => syncAvatarDefaultBottom());
+    window.addEventListener("resize", () => requestAnimationFrame(syncAvatarDefaultBottom));
     const confirmLogout = document.getElementById("confirmLogout");
 
     function applyAvatarEmotion(data) {
@@ -402,7 +448,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             try {
                 const res = await fetch(`${API_BASE_URL}/sessions`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: authHeaders({ "Content-Type": "application/json" }),
                     body: JSON.stringify({
                         userId: userId,
                         name: "Новий чат",
@@ -411,6 +457,10 @@ window.addEventListener("DOMContentLoaded", async () => {
                         updatedAt: new Date().toISOString()
                     }),
                 });
+                if (res.status === 401) {
+                    window.location.href = "/auth";
+                    return;
+                }
                 if (res.ok) {
                     const rawId = await res.text();
                     sessionId = rawId.replace(/^"|"$/g, '');
@@ -419,13 +469,33 @@ window.addEventListener("DOMContentLoaded", async () => {
             } catch (e) { console.error("Помилка створення початкової сесії", e); }
         }
 
+        if (!sessionId || sessionId === "null" || sessionId === "undefined") {
+            messagesContainer.innerHTML = "";
+            appendMessage(
+                "bot",
+                "Не вдалося відкрити чат (немає сесії). Увійдіть знову або натисніть «Новий чат»."
+            );
+            return;
+        }
+
         // Завантажуємо повідомлення
         try {
-            const msgRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
+            const msgRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+                headers: authHeaders(),
+            });
+            if (msgRes.status === 401) {
+                window.location.href = "/auth";
+                return;
+            }
+            if (msgRes.status === 404) {
+                localStorage.removeItem("sessionId");
+                await initSession();
+                return;
+            }
             if (msgRes.ok) {
                 const sessionData = await msgRes.json();
-                messagesContainer.innerHTML = ''; 
-                
+                messagesContainer.innerHTML = "";
+
                 if (sessionData.messages && sessionData.messages.length > 0) {
                     sessionData.messages.forEach(renderHistoryMessage);
                 } else {
@@ -434,19 +504,45 @@ window.addEventListener("DOMContentLoaded", async () => {
                         `Привіт, ${user.username || "студенте"}! Чим можу допомогти?`
                     );
                 }
+            } else {
+                messagesContainer.innerHTML = "";
+                appendMessage(
+                    "bot",
+                    "Не вдалося завантажити історію чату. Спробуйте вийти й увійти знову."
+                );
             }
         } catch (e) { 
             console.error("Помилка завантаження повідомлень", e);
             appendMessage("bot", "Помилка зв'язку з сервером."); 
         }
+        requestAnimationFrame(() => syncAvatarDefaultBottom());
     }
 
     function syncAttachButton() {
-        if (!attachBtn) return;
-        attachBtn.classList.toggle("has-file", !!pendingFile);
-        attachBtn.title = pendingFile
-            ? `Вкладено: ${pendingFile.name} (клацніть скрепку, щоб змінити)`
-            : "Додати PDF або зображення";
+        if (attachBtn) {
+            attachBtn.classList.toggle("has-file", !!pendingFile);
+            attachBtn.title = pendingFile
+                ? `Вкладено: ${pendingFile.name} (клацніть скрепку, щоб змінити)`
+                : "Додати PDF або зображення";
+        }
+        if (pendingFileBar && pendingFileNameEl) {
+            if (pendingFile) {
+                pendingFileBar.hidden = false;
+                pendingFileNameEl.textContent = pendingFile.name;
+            } else {
+                pendingFileBar.hidden = true;
+                pendingFileNameEl.textContent = "";
+            }
+        }
+        if (userInput) {
+            const normal =
+                userInput.dataset.placeholderNormal || "Напишіть повідомлення…";
+            const withFile =
+                userInput.dataset.placeholderWithFile ||
+                "Промпт до файлу (необов’язково)…";
+            userInput.placeholder = pendingFile ? withFile : normal;
+        }
+        requestAnimationFrame(() => syncAvatarDefaultBottom());
     }
 
     attachBtn?.addEventListener("click", () => {
@@ -457,6 +553,12 @@ window.addEventListener("DOMContentLoaded", async () => {
         fileInput.value = "";
         if (!f) return;
         pendingFile = f;
+        syncAttachButton();
+        userInput?.focus();
+    });
+    pendingFileRemoveBtn?.addEventListener("click", (e) => {
+        e.preventDefault();
+        pendingFile = null;
         syncAttachButton();
     });
 
@@ -624,7 +726,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         syncAttachButton();
 
         chatInFlight = true;
-        if (sendBtn) sendBtn.disabled = true;
+        streamAbortController = new AbortController();
+        setSendButtonMode("stop");
         if (attachBtn) attachBtn.disabled = true;
         if (voiceBtn) voiceBtn.disabled = true;
         if (userInput) userInput.disabled = true;
@@ -663,6 +766,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                     method: "POST",
                     headers: { Accept: "text/event-stream" },
                     body: fd,
+                    signal: streamAbortController.signal,
                 });
             } else {
                 res = await fetch(`${API_BASE_URL}/faq/chat/stream`, {
@@ -676,6 +780,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                         sessionId,
                         userId,
                     }),
+                    signal: streamAbortController.signal,
                 });
             }
 
@@ -744,24 +849,45 @@ window.addEventListener("DOMContentLoaded", async () => {
                 }
             });
         } catch (e) {
-            console.error("Помилка відправки", e);
             streamBubble?.remove();
             cleanupThinking();
-            appendMessage("bot", "Помилка відправки.");
+            const aborted =
+                e &&
+                (e.name === "AbortError" ||
+                    (typeof DOMException !== "undefined" &&
+                        e instanceof DOMException &&
+                        e.name === "AbortError"));
+            if (aborted) {
+                appendMessage(
+                    "bot",
+                    "_Генерацію зупинено._ Можете надіслати наступне повідомлення."
+                );
+            } else {
+                console.error("Помилка відправки", e);
+                appendMessage("bot", "Помилка відправки.");
+            }
         } finally {
             chatInFlight = false;
-            if (sendBtn) sendBtn.disabled = false;
+            streamAbortController = null;
+            setSendButtonMode("send");
             if (attachBtn) attachBtn.disabled = false;
             if (voiceBtn) voiceBtn.disabled = false;
             if (userInput) userInput.disabled = false;
             if (emotionLabel && emotionLabel.textContent === "думає…") {
                 emotionLabel.textContent = "Очікування";
             }
+            requestAnimationFrame(() => syncAvatarDefaultBottom());
         }
     }
 
     // Події кнопок
-    sendBtn?.addEventListener("click", sendMessage);
+    sendBtn?.addEventListener("click", () => {
+        if (chatInFlight && streamAbortController) {
+            streamAbortController.abort();
+            return;
+        }
+        sendMessage();
+    });
     userInput?.addEventListener("keypress", (e) => { 
         if (e.key === "Enter") {
             e.preventDefault();
@@ -785,7 +911,17 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (!userId) { window.location.href = "/auth"; return; }
         e.preventDefault();
         try {
-            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, name: "Новий чат", messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) });
+            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, {
+                method: "POST",
+                headers: authHeaders({ "Content-Type": "application/json" }),
+                body: JSON.stringify({
+                    userId,
+                    name: "Новий чат",
+                    messages: [],
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                }),
+            });
             if (res.ok) { const id = await res.text(); localStorage.setItem("sessionId", id.replace(/^"|"$/g, '')); window.location.href = "/chat"; }
         } catch (e) { console.error(e); }
     });

@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from jose import jwt
 from passlib.context import CryptContext
+from passlib.exc import UnknownHashError
 
 from ..auth.deps import get_current_user
 from ..config import JWT_ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM, JWT_SECRET_KEY
@@ -14,12 +15,20 @@ from ..schemas.users import UserLogin
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
-# Використовуємо sha256_crypt, щоб уникнути обмеження bcrypt у 72 байти
-pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+# Нові паролі — sha256_crypt (немає ліміту 72 байти як у bcrypt). Перевірка також bcrypt — для старих записів у БД.
+pwd_context = CryptContext(
+    schemes=["sha256_crypt", "bcrypt"],
+    deprecated="auto",
+)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    if not hashed_password or not isinstance(hashed_password, str):
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except UnknownHashError:
+        return False
 
 
 def hash_password(password: str) -> str:
