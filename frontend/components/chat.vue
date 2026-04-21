@@ -29,7 +29,6 @@
       <div class="input-area">
         <input type="text" id="chat-input" placeholder="Напишіть щось..." />
         <button id="send-btn">📩</button>
-        <button id="voice-btn">🎤</button>
       </div>
     </section>
   </main>

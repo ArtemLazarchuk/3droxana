@@ -6,6 +6,10 @@ from typing import Optional
 class Message(BaseModel):
     role: str  # "user" або "assistant"
     text: str
+    # Лише для повідомлень асистента (після парсингу LLM); у користувача зазвичай None
+    emotion: Optional[str] = None  # англ.: neutral, happy, sad, surprise, thinking
+    link: Optional[str] = None
+    title: Optional[str] = None  # короткий заголовок теми чату з відповіді моделі
 
 class SessionBase(BaseModel):
     userId: str

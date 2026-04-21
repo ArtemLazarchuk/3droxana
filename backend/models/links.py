@@ -1,6 +1,8 @@
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from assistant_core.link_indexing import CHUNKS_COLLECTION
+
 collection_name = "links"
 
 def serialize_link(link) -> dict:
@@ -20,4 +22,5 @@ async def create_link(db: AsyncIOMotorDatabase, data: dict):
     return str(result.inserted_id)
 
 async def delete_link(db: AsyncIOMotorDatabase, id: str):
+    await db[CHUNKS_COLLECTION].delete_many({"link_id": id})
     await db[collection_name].delete_one({"_id": ObjectId(id)})

@@ -1,7 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from assistant_core.chat import ChatServiceError, ChatSessionNotFound, process_chat
+from assistant_core.attachments import prepare_user_attachment
+from assistant_core.chat import (
+    ChatServiceError,
+    ChatSessionNotFound,
+    process_chat,
+    stream_chat_events,
+)
 
 from ..auth.deps import get_current_user
 from ..db.mongodb import get_database
@@ -66,5 +75,87 @@ async def chat_with_faq(
         link=result["link"],
         emotion=result["emotion"],
         title=result["title"],
+    )
+
+
+@router.post("/chat/stream")
+async def chat_with_faq_stream(request: ChatRequest, db=Depends(get_database)):
+    """Потокова відповідь (SSE): status → delta → done | error."""
+
+    async def event_iter():
+        try:
+            async for chunk in stream_chat_events(
+                db, request.sessionId, request.message
+            ):
+                yield chunk
+        except ChatSessionNotFound:
+            yield (
+                "data: "
+                + json.dumps(
+                    {"type": "error", "detail": "Сесія не знайдена"},
+                    ensure_ascii=False,
+                )
+                + "\n\n"
+            ).encode("utf-8")
+
+    return StreamingResponse(
+        event_iter(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/chat/stream/upload")
+async def chat_with_faq_stream_upload(
+    message: str = Form(""),
+    sessionId: str = Form(...),
+    userId: str = Form(...),
+    file: UploadFile = File(...),
+    db=Depends(get_database),
+):
+    """
+    Те саме SSE, що /chat/stream, але з одним файлом (PDF або зображення).
+    PDF обробляється локально; зображення — через vision-модель Together (див. TOGETHER_VISION_MODEL).
+    """
+
+    raw = await file.read()
+    block, err = await prepare_user_attachment(file.filename or "file", raw)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    fname = file.filename or "file"
+
+    async def event_iter():
+        try:
+            async for chunk in stream_chat_events(
+                db,
+                sessionId,
+                message,
+                attachment_block=block,
+                attachment_filename=fname,
+            ):
+                yield chunk
+        except ChatSessionNotFound:
+            yield (
+                "data: "
+                + json.dumps(
+                    {"type": "error", "detail": "Сесія не знайдена"},
+                    ensure_ascii=False,
+                )
+                + "\n\n"
+            ).encode("utf-8")
+
+    return StreamingResponse(
+        event_iter(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 

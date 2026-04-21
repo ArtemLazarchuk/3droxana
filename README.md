@@ -13,14 +13,17 @@
 ## Вимоги
 
 - Python 3.12+
-- Git Bash **або** інший bash‑сумісний термінал на Windows
+- **Windows:** Git Bash, PowerShell або CMD (для шляхів і активації venv нижче — різниця між оболонками)
+- **macOS:** стандартний Terminal (zsh)
 - Доступ до MongoDB (локальний або MongoDB Atlas)
 
 ---
 
-## Локальний запуск (Git Bash, venv)
+## Локальний запуск (venv)
 
 ### 1. Клонувати репозиторій та перейти в папку проєкту
+
+Однаково на **Windows** і **macOS**:
 
 ```bash
 git clone <URL-репозиторію>
@@ -29,24 +32,32 @@ cd 3droxana
 
 ### 2. Створити віртуальне середовище (один раз)
 
-```bash
-py -3 -m venv venv   # або: python -m venv venv
-```
+| Платформа | Команда |
+|-----------|---------|
+| **Windows** | `py -3 -m venv venv` — якщо встановлений **Python Launcher** (`py`). Якщо `py` не знаходиться, використайте `python -m venv venv` або повний шлях до `python.exe` з інсталятора python.org. |
+| **macOS** | `python3 -m venv venv` — на Apple зазвичай **немає** команди `py`; використовуйте `python3`. |
 
-### 3. Активувати venv у Git Bash
+### 3. Активувати venv
 
-```bash
-source venv/Scripts/activate
-```
+| Платформа | Оболонка | Команда |
+|-----------|----------|---------|
+| **Windows** | Git Bash | `source venv/Scripts/activate` |
+| **Windows** | CMD | `venv\Scripts\activate.bat` |
+| **Windows** | PowerShell | `venv\Scripts\Activate.ps1` |
+| **macOS** | zsh / bash | `source venv/bin/activate` |
 
 У рядку термінала має з’явитися префікс `(venv)`.
 
 ### 4. Встановити залежності
 
+Після активації venv на **обох** платформах надійний варіант — через модуль `pip` (так працює навіть якщо команда `pip` не в `PATH`):
+
 ```bash
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
+
+На macOS, якщо venv ще **не** активовано, можна одноразово викликати: `python3 -m pip install -r requirements.txt` — але краще спочатку активувати venv, щоб пакети ставили саме в нього.
 
 ### 5. Налаштувати секрети через `.env`
 
@@ -63,6 +74,8 @@ TOGETHER_API_KEY="137f302b0bb50bb26cbf1f491b2bf183bf54c1bebd7df461ac9d0441f8f7f9
 - `TOGETHER_API_KEY` — API‑ключ від Together (для LLM‑моделі).
 
 ### 6. Запустити сервер
+
+Однаково після активації venv:
 
 ```bash
 python -m uvicorn backend.main:app --reload --port 8000
