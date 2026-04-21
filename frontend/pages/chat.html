@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.6.1/github-markdown-dark.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
     <!-- ?v= збільшуйте після змін у style.css, якщо браузер тримає старий кеш -->
-    <link rel="stylesheet" href="/static/css/style.css?v=2">
+    <link rel="stylesheet" href="/static/css/style.css?v=4">
 </head>
 <body data-theme="dark">
 
@@ -47,9 +47,20 @@
     <div class="messages-container flex-grow-1" id="messages"></div>
 
     <div class="input-area">
+        <div id="pending-file-bar" class="pending-file-bar" hidden>
+            <span class="pending-file-bar-icon" aria-hidden="true"><i class="bi bi-paperclip"></i></span>
+            <div class="pending-file-bar-main">
+                <span class="pending-file-bar-label">Файл додано</span>
+                <strong id="pending-file-name" class="pending-file-bar-name"></strong>
+            </div>
+            <button type="button" class="pending-file-remove" id="pending-file-remove" title="Прибрати файл" aria-label="Прибрати вкладення"><i class="bi bi-x-lg"></i></button>
+        </div>
         <div class="position-relative d-flex gap-2 align-items-stretch">
             <input type="file" id="file-input" class="d-none" accept=".pdf,application/pdf,image/png,image/jpeg,image/jpg,image/webp,image/gif">
-            <input type="text" class="form-control custom-input" id="user-input" placeholder="Напишіть повідомлення…" autocomplete="off" lang="uk">
+            <input type="text" class="form-control custom-input" id="user-input"
+                data-placeholder-normal="Напишіть повідомлення…"
+                data-placeholder-with-file="Промпт до файлу (необов’язково)…"
+                placeholder="Напишіть повідомлення…" autocomplete="off" lang="uk">
             <button type="button" class="btn-attach" id="attach-btn" title="Додати PDF або зображення" aria-label="Вкладення"><i class="bi bi-paperclip"></i></button>
             <button type="button" class="btn-voice" id="voice-btn" title="Голос (браузер): клік — слухати, ще раз — зупинити й надіслати" aria-label="Голосове введення" aria-pressed="false"><i class="bi bi-mic-fill"></i></button>
             <button type="button" class="btn-send" id="send-btn"><i class="bi bi-send-fill"></i></button>
@@ -82,6 +93,6 @@
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" crossorigin="anonymous"></script>
-<script src="/static/js/chat.js?v=2"></script>
+<script src="/static/js/chat.js?v=4"></script>
 </body>
 </html>

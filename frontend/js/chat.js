@@ -185,6 +185,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     const voiceBtn = document.getElementById("voice-btn");
     const fileInput = document.getElementById("file-input");
     let pendingFile = null;
+    const pendingFileBar = document.getElementById("pending-file-bar");
+    const pendingFileNameEl = document.getElementById("pending-file-name");
+    const pendingFileRemoveBtn = document.getElementById("pending-file-remove");
     let chatInFlight = false;
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
@@ -496,11 +499,30 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     function syncAttachButton() {
-        if (!attachBtn) return;
-        attachBtn.classList.toggle("has-file", !!pendingFile);
-        attachBtn.title = pendingFile
-            ? `Вкладено: ${pendingFile.name} (клацніть скрепку, щоб змінити)`
-            : "Додати PDF або зображення";
+        if (attachBtn) {
+            attachBtn.classList.toggle("has-file", !!pendingFile);
+            attachBtn.title = pendingFile
+                ? `Вкладено: ${pendingFile.name} (клацніть скрепку, щоб змінити)`
+                : "Додати PDF або зображення";
+        }
+        if (pendingFileBar && pendingFileNameEl) {
+            if (pendingFile) {
+                pendingFileBar.hidden = false;
+                pendingFileNameEl.textContent = pendingFile.name;
+            } else {
+                pendingFileBar.hidden = true;
+                pendingFileNameEl.textContent = "";
+            }
+        }
+        if (userInput) {
+            const normal =
+                userInput.dataset.placeholderNormal || "Напишіть повідомлення…";
+            const withFile =
+                userInput.dataset.placeholderWithFile ||
+                "Промпт до файлу (необов’язково)…";
+            userInput.placeholder = pendingFile ? withFile : normal;
+        }
+        requestAnimationFrame(() => syncAvatarDefaultBottom());
     }
 
     attachBtn?.addEventListener("click", () => {
@@ -511,6 +533,12 @@ window.addEventListener("DOMContentLoaded", async () => {
         fileInput.value = "";
         if (!f) return;
         pendingFile = f;
+        syncAttachButton();
+        userInput?.focus();
+    });
+    pendingFileRemoveBtn?.addEventListener("click", (e) => {
+        e.preventDefault();
+        pendingFile = null;
         syncAttachButton();
     });
 
