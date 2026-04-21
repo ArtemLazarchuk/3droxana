@@ -189,6 +189,26 @@ window.addEventListener("DOMContentLoaded", async () => {
     const pendingFileNameEl = document.getElementById("pending-file-name");
     const pendingFileRemoveBtn = document.getElementById("pending-file-remove");
     let chatInFlight = false;
+    /** Скасування поточного SSE-запиту (кнопка «Зупинити»). */
+    let streamAbortController = null;
+
+    const SEND_BTN_ICON_HTML = '<i class="bi bi-send-fill"></i>';
+    const STOP_BTN_ICON_HTML = '<i class="bi bi-stop-fill"></i>';
+
+    function setSendButtonMode(mode) {
+        if (!sendBtn) return;
+        if (mode === "stop") {
+            sendBtn.classList.add("btn-send--stop");
+            sendBtn.innerHTML = STOP_BTN_ICON_HTML;
+            sendBtn.title = "Зупинити відповідь";
+            sendBtn.setAttribute("aria-label", "Зупинити генерацію відповіді");
+        } else {
+            sendBtn.classList.remove("btn-send--stop");
+            sendBtn.innerHTML = SEND_BTN_ICON_HTML;
+            sendBtn.title = "Надіслати";
+            sendBtn.setAttribute("aria-label", "Надіслати повідомлення");
+        }
+    }
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
     const newChatBtn = document.getElementById("new-chat-btn");
@@ -706,7 +726,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         syncAttachButton();
 
         chatInFlight = true;
-        if (sendBtn) sendBtn.disabled = true;
+        streamAbortController = new AbortController();
+        setSendButtonMode("stop");
         if (attachBtn) attachBtn.disabled = true;
         if (voiceBtn) voiceBtn.disabled = true;
         if (userInput) userInput.disabled = true;
@@ -745,6 +766,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                     method: "POST",
                     headers: { Accept: "text/event-stream" },
                     body: fd,
+                    signal: streamAbortController.signal,
                 });
             } else {
                 res = await fetch(`${API_BASE_URL}/faq/chat/stream`, {
@@ -758,6 +780,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                         sessionId,
                         userId,
                     }),
+                    signal: streamAbortController.signal,
                 });
             }
 
@@ -826,24 +849,45 @@ window.addEventListener("DOMContentLoaded", async () => {
                 }
             });
         } catch (e) {
-            console.error("Помилка відправки", e);
             streamBubble?.remove();
             cleanupThinking();
-            appendMessage("bot", "Помилка відправки.");
+            const aborted =
+                e &&
+                (e.name === "AbortError" ||
+                    (typeof DOMException !== "undefined" &&
+                        e instanceof DOMException &&
+                        e.name === "AbortError"));
+            if (aborted) {
+                appendMessage(
+                    "bot",
+                    "_Генерацію зупинено._ Можете надіслати наступне повідомлення."
+                );
+            } else {
+                console.error("Помилка відправки", e);
+                appendMessage("bot", "Помилка відправки.");
+            }
         } finally {
             chatInFlight = false;
-            if (sendBtn) sendBtn.disabled = false;
+            streamAbortController = null;
+            setSendButtonMode("send");
             if (attachBtn) attachBtn.disabled = false;
             if (voiceBtn) voiceBtn.disabled = false;
             if (userInput) userInput.disabled = false;
             if (emotionLabel && emotionLabel.textContent === "думає…") {
                 emotionLabel.textContent = "Очікування";
             }
+            requestAnimationFrame(() => syncAvatarDefaultBottom());
         }
     }
 
     // Події кнопок
-    sendBtn?.addEventListener("click", sendMessage);
+    sendBtn?.addEventListener("click", () => {
+        if (chatInFlight && streamAbortController) {
+            streamAbortController.abort();
+            return;
+        }
+        sendMessage();
+    });
     userInput?.addEventListener("keypress", (e) => { 
         if (e.key === "Enter") {
             e.preventDefault();

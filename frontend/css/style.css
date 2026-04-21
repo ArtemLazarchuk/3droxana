@@ -778,6 +778,18 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   transform: scale(0.96);
 }
 
+/* Під час стріму та сама кнопка — «Зупинити» */
+.input-area .btn-send.btn-send--stop {
+  background-color: #b83232;
+  border-color: rgba(255, 120, 120, 0.55);
+  color: #fff;
+}
+
+.input-area .btn-send.btn-send--stop:hover {
+  background-color: #d14343;
+  border-color: rgba(255, 160, 160, 0.65);
+}
+
 /* === 6. АВАТАР (GLASSMORPHISM) === */
 .avatar-fixed {
   position: fixed;
