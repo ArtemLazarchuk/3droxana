@@ -8,170 +8,104 @@ window.addEventListener("DOMContentLoaded", async () => {
     const messagesContainer = document.getElementById("messages");
     const userInput = document.getElementById("user-input");
     const sendBtn = document.getElementById("send-btn");
+    const attachBtn = document.getElementById("attach-btn");
+    const fileInput = document.getElementById("file-input");
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
     const newChatBtn = document.getElementById("new-chat-btn");
-    const avatarBox = document.querySelector('.avatar-fixed'); // Блок для підсвітки
+    const avatarBox = document.querySelector('.avatar-fixed');
+    const resizeHandle = document.querySelector('.resize-handle');
+    const themeToggle = document.getElementById("theme-toggle");
+    const confirmLogout = document.getElementById("confirmLogout");
 
     const user = JSON.parse(localStorage.getItem("user"));
     const userId = user?._id?.$oid || user?._id || null;
 
-    if (!user) {
-        window.location.href = "/auth";
-        return;
+    // --- 1. ТЕМА ---
+    function applyTheme(t) {
+        document.body.setAttribute("data-theme", t); localStorage.setItem("theme", t);
+        const i = document.getElementById("theme-icon"); if (i) i.className = t === "light" ? "bi bi-sun-fill" : "bi bi-moon-stars-fill";
     }
+    applyTheme(localStorage.getItem("theme") || "dark");
+    themeToggle?.addEventListener("click", () => applyTheme(document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"));
 
-    // Тогл меню (Sidebar)
+    // --- 2. ВИХІД ---
+    confirmLogout?.addEventListener("click", () => { localStorage.clear(); window.location.href = "/"; });
+
+    // --- 3. ЗГОРТАННЯ МЕНЮ ---
     toggleBtn?.addEventListener("click", () => {
         sidebar.classList.toggle("collapsed");
         mainContent.classList.toggle("expanded");
     });
 
-    // Функція виводу повідомлення
-    function appendMessage(role, text) {
-        const msgDiv = document.createElement("div");
-        msgDiv.className = `message ${role === "user" ? "user" : "bot"}`;
-        msgDiv.textContent = text;
-        messagesContainer.appendChild(msgDiv);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    // ІНІЦІАЛІЗАЦІЯ СЕСІЇ (Завантаження історії)
-    async function initSession() {
-        let sessionId = localStorage.getItem("sessionId");
-
-        if (!sessionId || sessionId === "null" || sessionId === "undefined") {
-            try {
-                const res = await fetch(`${API_BASE_URL}/sessions`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        userId: userId,
-                        name: "Новий чат",
-                        messages: [],
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    }),
-                });
-                if (res.ok) {
-                    const rawId = await res.text();
-                    sessionId = rawId.replace(/^"|"$/g, '');
-                    localStorage.setItem("sessionId", sessionId);
-                }
-            } catch (e) { console.error("Помилка створення початкової сесії", e); }
-        }
-
-        // Завантажуємо повідомлення
-        try {
-            const msgRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
-            if (msgRes.ok) {
-                const sessionData = await msgRes.json();
-                messagesContainer.innerHTML = ''; 
-                
-                if (sessionData.messages && sessionData.messages.length > 0) {
-                    sessionData.messages.forEach(msg => appendMessage(msg.role === "user" ? "user" : "bot", msg.text));
-                } else {
-                    appendMessage("bot", `Привіт, ${user.username || 'студенте'}! Чим можу допомогти? 👋`);
-                }
-            }
-        } catch (e) { 
-            console.error("Помилка завантаження повідомлень", e);
-            appendMessage("bot", "Помилка зв'язку з сервером."); 
-        }
-    }
-
-    // ВІДПРАВКА ПОВІДОМЛЕННЯ
-    async function sendMessage() {
-        const text = userInput.value.trim();
-        const sessionId = localStorage.getItem("sessionId");
-        if (!text || !sessionId) return;
-
-        appendMessage("user", text);
-        userInput.value = "";
-        
-        try {
-            const res = await fetch(`${API_BASE_URL}/faq/chat`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text, sessionId, userId }),
-            });
-            const data = await res.json();
-            
-            appendMessage("bot", data.response);
-
-            // ПІДСВІТКА АВАТАРА
-            if (avatarBox) {
-                avatarBox.classList.add('active-glow');
-                setTimeout(() => avatarBox.classList.remove('active-glow'), 3000);
-            }
-
-            // Оновлення емоції
-            if (data.emotion && avatarVideo) {
-                const videoMap = {
-                    "neutral": "speak_blink.mp4", "happy": "happy.mp4", "sad": "sad.mp4",
-                    "surprise": "surprize1.mp4", "thinking": "squinted1.mp4",
-                    "😊": "happy.mp4", "😄": "speak_blink.mp4", "😲": "surprize1.mp4", "🤔": "squinted1.mp4"
-                };
-                const filename = videoMap[data.emotion] || "speak_blink.mp4";
-                const sourceElement = avatarVideo.querySelector("source");
-                if (sourceElement && !sourceElement.src.includes(filename)) {
-                    sourceElement.src = `/avatar/animations/${filename}`;
-                    avatarVideo.load();
-                    avatarVideo.play().catch(e => console.log("Помилка відео:", e));
-                    if(emotionLabel) emotionLabel.textContent = data.emotion;
-                }
-            }
-        } catch (e) { 
-            console.error("Помилка відправки", e);
-            appendMessage("bot", "Помилка відправки."); 
-        }
-    }
-
-    // Події кнопок
-    sendBtn?.addEventListener("click", sendMessage);
-    userInput?.addEventListener("keypress", (e) => { 
-        if (e.key === "Enter") {
-            e.preventDefault();
-            sendMessage();
-        }
+    // --- 4. ПРИКРІПЛЕННЯ ---
+    attachBtn?.addEventListener("click", () => fileInput.click());
+    fileInput?.addEventListener("change", (e) => {
+        if(e.target.files[0]) appendMessage("bot", `📁 Файл: ${e.target.files[0].name}`);
     });
 
-    // === НОВИЙ ЧАТ (РЕАЛІЗАЦІЯ ЧЕРЕЗ newSession) ===
+    // --- 5. DRAG & RESIZE АВАТАРА ---
+    if (avatarBox) {
+        let isDragging = false, isResizing = false, startX, startY, initialL, initialT, initialW;
+        resizeHandle?.addEventListener('mousedown', (e) => { e.stopPropagation(); isResizing = true; startX = e.clientX; initialW = avatarBox.offsetWidth; avatarBox.style.transition = 'none'; });
+        avatarBox.addEventListener('mousedown', (e) => { if (isResizing) return; isDragging = true; avatarBox.style.transition = 'none'; const r = avatarBox.getBoundingClientRect(); initialL = r.left; initialT = r.top; startX = e.clientX; startY = e.clientY; avatarBox.style.top = initialT+'px'; avatarBox.style.left = initialL+'px'; avatarBox.style.bottom = 'auto'; avatarBox.style.right = 'auto'; });
+        document.addEventListener('mousemove', (e) => {
+            if (isResizing) { const w = initialW + (e.clientX - startX); if (w >= 150 && w <= 450) avatarBox.style.width = w + 'px'; }
+            else if (isDragging) { avatarBox.style.left = (initialL + (e.clientX - startX)) + 'px'; avatarBox.style.top = (initialT + (e.clientY - startY)) + 'px'; }
+        });
+        document.addEventListener('mouseup', () => { isDragging = false; isResizing = false; avatarBox.style.transition = 'box-shadow 0.4s ease, border-color 0.4s ease, transform 0.3s'; });
+    }
+
+    // --- 6. ЛОГІКА ЧАТУ (Тільки якщо є messagesContainer) ---
+    function appendMessage(role, text) {
+        if (!messagesContainer) return;
+        const d = document.createElement("div"); d.className = `message ${role === "user" ? "user" : "bot"}`;
+        d.textContent = text; messagesContainer.appendChild(d); messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    async function initSession() {
+        if (!messagesContainer || !userId) return;
+        let sid = localStorage.getItem("sessionId");
+        if (!sid || sid === "null") {
+            try {
+                const res = await fetch(`${API_BASE_URL}/sessions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, name: "Новий чат", messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) });
+                if (res.ok) { const id = await res.text(); sid = id.replace(/^"|"$/g, ''); localStorage.setItem("sessionId", sid); }
+            } catch (e) { console.error(e); }
+        }
+        try {
+            const res = await fetch(`${API_BASE_URL}/sessions/${sid}`);
+            if (res.ok) {
+                const data = await res.json(); messagesContainer.innerHTML = ''; 
+                if (data.messages.length > 0) data.messages.forEach(m => appendMessage(m.role === "user" ? "user" : "bot", m.text));
+                else appendMessage("bot", "Привіт! Чим можу допомогти?");
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    async function sendMessage() {
+        const text = userInput.value.trim(), sid = localStorage.getItem("sessionId");
+        if (!text || !sid) return;
+        appendMessage("user", text); userInput.value = ""; userInput.disabled = true;
+        try {
+            const res = await fetch(`${API_BASE_URL}/faq/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, sessionId: sid, userId }) });
+            const d = await res.json(); 
+            if (avatarBox) { avatarBox.classList.add('active-glow'); setTimeout(() => avatarBox.classList.remove('active-glow'), 4000); }
+            appendMessage("bot", d.response);
+        } catch (e) { appendMessage("bot", "Помилка."); }
+        finally { userInput.disabled = false; userInput.focus(); }
+    }
+
+    sendBtn?.addEventListener("click", sendMessage);
+    userInput?.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+    
     newChatBtn?.addEventListener("click", async (e) => {
+        if (!userId) { window.location.href = "/auth"; return; }
         e.preventDefault();
         try {
-            // Звертаємось до твого спеціального ендпоінту
-            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    userId: userId,
-                    name: "new Чат з FAQ",
-                    messages: [],
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }),
-            });
-            
-            if (res.ok) {
-                const rawId = await res.text();
-                const newSessionId = rawId.replace(/^"|"$/g, '');
-                
-                // Оновлюємо ID в локальному сховищі
-                localStorage.setItem("sessionId", newSessionId);
-                
-                // Очищаємо екран і завантажуємо "чисту" сесію
-                messagesContainer.innerHTML = '';
-                await initSession(); 
-                console.log("Нову сесію створено успішно:", newSessionId);
-            } else {
-                console.error("Сервер не зміг створити нову сесію");
-            }
-        } catch (e) { 
-            console.error("Помилка при створенні нового чату:", e); 
-        }
+            const res = await fetch(`${API_BASE_URL}/sessions/newSession`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, name: "Новий чат", messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) });
+            if (res.ok) { const id = await res.text(); localStorage.setItem("sessionId", id.replace(/^"|"$/g, '')); window.location.href = "/chat"; }
+        } catch (e) { console.error(e); }
     });
 
-    // Запуск при завантаженні
-    initSession();
+    if (window.location.pathname.includes('chat')) initSession();
 });

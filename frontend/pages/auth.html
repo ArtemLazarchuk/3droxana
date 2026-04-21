@@ -1,121 +1,179 @@
 <!DOCTYPE html>
-<html lang="uk" data-bs-theme="dark">
+<html lang="uk" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вхід в систему</title>
+    <title>Автентифікація | KPI Assistant</title>
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/css/style.css">
+
     <style>
-        .auth-container {
-            height: 100vh;
+        /* ГАРАНТОВАНЕ ВІДНОВЛЕННЯ СТИЛІВ ДЛЯ ЦІЄЇ СТОРІНКИ */
+        body {
+            background-color: var(--bg-color) !important;
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: var(--bg-color);
+            height: 100vh;
+            margin: 0;
         }
+
         .auth-card {
-            background-color: var(--sidebar-bg);
+            background-color: var(--sidebar-bg) !important;
+            border: 1px solid var(--border-color) !important;
             padding: 2.5rem;
-            border-radius: 20px;
+            border-radius: 24px;
             width: 100%;
             max-width: 400px;
-            border: 1px solid #333;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            text-align: center;
         }
+
+        /* Стиль полів вводу: темний фон, білий текст */
         .form-control {
-            background-color: #2b2b2b;
-            border: 1px solid #444;
-            color: white;
-            padding: 12px;
+            background-color: #2b2b2b !important;
+            border: 1px solid #444 !important;
+            color: white !important;
+            padding: 12px 15px !important;
+            border-radius: 12px !important;
+            margin-bottom: 5px;
         }
+
+        .form-control::placeholder {
+            color: #888 !important;
+        }
+
         .form-control:focus {
-            background-color: #303030;
-            border-color: var(--accent-color);
-            color: white;
-            box-shadow: none;
+            border-color: var(--accent-color) !important;
+            box-shadow: 0 0 0 0.25rem rgba(138, 79, 255, 0.25) !important;
         }
+
+        /* Стиль фіолетової кнопки */
         .btn-auth {
-            background-color: var(--accent-color);
-            color: white;
-            padding: 12px;
+            background-color: var(--accent-color) !important;
+            color: white !important;
+            width: 100%;
+            padding: 14px;
+            border: none !important;
+            border-radius: 12px !important;
             font-weight: 600;
+            margin-top: 15px;
+            transition: 0.3s;
         }
-        .btn-auth:hover { background-color: var(--accent-hover); color: white; }
+
+        .btn-auth:hover {
+            background-color: var(--accent-hover) !important;
+            transform: translateY(-2px);
+        }
+
+        /* Повідомлення про помилки */
+        .error-feedback {
+            color: #ff5f5f;
+            font-size: 0.85rem;
+            text-align: left;
+            margin-bottom: 10px;
+            display: none; /* Показуємо через JS */
+        }
+
+        .is-invalid {
+            border-color: #ff5f5f !important;
+        }
+
+        .input-group-container {
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
 
-<div class="auth-container">
-    <div class="auth-card text-center">
-        <img src="/static/images/avatar1.png" alt="Avatar" class="rounded-circle mb-4" width="100" height="100" style="object-fit: cover;">
-        
-        <h3 id="form-title" class="mb-4 text-white">Вхід</h3>
+<div class="auth-card">
+    <img src="/static/images/avatar1.png" alt="Avatar" class="rounded-circle mb-3" width="80" height="80" style="border: 2px solid var(--accent-color); padding: 3px;">
+    
+    <h2 id="form-title" class="mb-4 fw-bold text-white">Вхід</h2>
 
-        <!-- Форма Входу -->
-        <form id="signin-form">
-            <div class="mb-3">
-                <input type="email" class="form-control" id="signin-email" placeholder="Email" required>
-            </div>
-            <div class="mb-4">
-                <input type="password" class="form-control" id="signin-password" placeholder="Пароль" required>
-            </div>
-            <button type="submit" class="btn btn-auth w-100 rounded-3">Увійти</button>
-        </form>
+    <!-- ФОРМА ВХОДУ -->
+    <form id="signin-form">
+        <div class="input-group-container">
+            <input type="email" class="form-control" id="signin-email" placeholder="Електронна пошта" required>
+            <div id="signin-email-err" class="error-feedback"></div>
+        </div>
+        <div class="input-group-container">
+            <input type="password" class="form-control" id="signin-password" placeholder="Пароль" required>
+            <div id="signin-pass-err" class="error-feedback"></div>
+        </div>
+        <button type="submit" class="btn btn-auth">Увійти</button>
+    </form>
 
-        <!-- Форма Реєстрації (прихована) -->
-        <form id="signup-form" class="d-none">
-            <div class="mb-3">
-                <input type="text" class="form-control" id="signup-username" placeholder="Ім'я" required>
-            </div>
-            <div class="mb-3">
-                <input type="email" class="form-control" id="signup-email" placeholder="Email" required>
-            </div>
-            <div class="mb-3">
-                <input type="password" class="form-control" id="signup-password" placeholder="Пароль" required>
-            </div>
-            <div class="mb-4">
-                <input type="password" class="form-control" id="signup-confirm" placeholder="Повторіть пароль" required>
-            </div>
-            <button type="submit" class="btn btn-auth w-100 rounded-3">Створити акаунт</button>
-        </form>
+    <!-- ФОРМА РЕЄСТРАЦІЇ -->
+    <form id="signup-form" class="d-none">
+        <div class="input-group-container">
+            <input type="text" class="form-control" id="signup-username" placeholder="Ім'я користувача" required>
+            <div id="signup-user-err" class="error-feedback"></div>
+        </div>
+        <div class="input-group-container">
+            <input type="email" class="form-control" id="signup-email" placeholder="Email" required>
+            <div id="signup-email-err" class="error-feedback"></div>
+        </div>
+        <div class="input-group-container">
+            <input type="password" class="form-control" id="signup-password" placeholder="Пароль (мін. 6 симв.)" required>
+            <div id="signup-pass-err" class="error-feedback"></div>
+        </div>
+        <div class="input-group-container">
+            <input type="password" class="form-control" id="signup-confirm" placeholder="Повторіть пароль" required>
+            <div id="signup-confirm-err" class="error-feedback"></div>
+        </div>
+        <button type="submit" class="btn btn-auth">Створити акаунт</button>
+    </form>
 
-        <p class="mt-4 text-secondary small" id="toggle-text">
-            Ще не маєте акаунту? <a href="#" id="toggle-link" class="text-white text-decoration-none fw-bold">Зареєструватися</a>
-        </p>
-    </div>
+    <p class="mt-4 text-secondary small" id="toggle-text">
+        Ще не маєте акаунту? <a href="#" id="toggle-link" class="text-white text-decoration-none fw-bold">Зареєструватися</a>
+    </p>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // JS логіка перемикання форм та запитів (з твого старого коду)
     const toggleLink = document.getElementById("toggle-link");
-    const toggleText = document.getElementById("toggle-text");
     const title = document.getElementById("form-title");
+    const toggleText = document.getElementById("toggle-text");
     const signInForm = document.getElementById("signin-form");
     const signUpForm = document.getElementById("signup-form");
 
-    // Перемикач
+    function showError(inputId, errId, msg) {
+        const input = document.getElementById(inputId);
+        const errDiv = document.getElementById(errId);
+        if (input && errDiv) {
+            input.classList.add("is-invalid");
+            errDiv.textContent = msg;
+            errDiv.style.display = "block";
+        }
+    }
+
+    function clearErrors() {
+        document.querySelectorAll('.form-control').forEach(i => i.classList.remove('is-invalid'));
+        document.querySelectorAll('.error-feedback').forEach(d => d.style.display = 'none');
+    }
+
     toggleLink.addEventListener("click", (e) => {
         e.preventDefault();
+        clearErrors();
         const isLogin = !signInForm.classList.contains("d-none");
-        
         if (isLogin) {
-            signInForm.classList.add("d-none");
-            signUpForm.classList.remove("d-none");
+            signInForm.classList.add("d-none"); signUpForm.classList.remove("d-none");
             title.textContent = "Реєстрація";
-            toggleText.innerHTML = 'Вже є акаунт? <a href="#" id="toggle-link-back" class="text-white text-decoration-none fw-bold">Увійти</a>';
-            document.getElementById("toggle-link-back").addEventListener("click", toggleLink.click.bind(toggleLink)); // хак для прив'язки події
+            toggleText.innerHTML = 'Вже є акаунт? <a href="#" id="toggle-link" class="text-white text-decoration-none fw-bold">Увійти</a>';
         } else {
-            signInForm.classList.remove("d-none");
-            signUpForm.classList.add("d-none");
+            signInForm.classList.remove("d-none"); signUpForm.classList.add("d-none");
             title.textContent = "Вхід";
             toggleText.innerHTML = 'Ще не маєте акаунту? <a href="#" id="toggle-link" class="text-white text-decoration-none fw-bold">Зареєструватися</a>';
         }
+        document.getElementById("toggle-link").onclick = (ev) => { ev.preventDefault(); toggleLink.click(); };
     });
 
-    // Логіка Входу
     signInForm.addEventListener("submit", async (e) => {
         e.preventDefault();
+        clearErrors();
         const email = document.getElementById("signin-email").value;
         const password = document.getElementById("signin-password").value;
 
@@ -126,26 +184,37 @@
                 body: JSON.stringify({ email, password }),
             });
             const result = await response.json();
-            
             if (response.ok) {
                 localStorage.setItem('user', JSON.stringify(result.user));
                 window.location.href = "/chat";
             } else {
-                alert("Помилка: " + result.detail);
+                if (result.detail.includes("email") || result.detail.includes("found")) {
+                    showError("signin-email", "signin-email-err", "Користувача не знайдено");
+                } else {
+                    showError("signin-password", "signin-pass-err", "Неправильний пароль");
+                }
             }
-        } catch(err) { alert("Помилка з'єднання"); }
+        } catch(err) { console.log(err); }
     });
 
-    // Логіка Реєстрації
     signUpForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        // ... (Тут твоя стара логіка реєстрації, ID полів збережені) ...
+        clearErrors();
         const username = document.getElementById("signup-username").value;
         const email = document.getElementById("signup-email").value;
         const password = document.getElementById("signup-password").value;
         const confirm = document.getElementById("signup-confirm").value;
 
-        if(password !== confirm) { alert("Паролі не співпадають"); return; }
+        let hasError = false;
+        if (password.length < 6) {
+            showError("signup-password", "signup-pass-err", "Пароль має бути мін. 6 символів");
+            hasError = true;
+        }
+        if (password !== confirm) {
+            showError("signup-confirm", "signup-confirm-err", "Паролі не збігаються");
+            hasError = true;
+        }
+        if (hasError) return;
 
         try {
             const response = await fetch("/api/users/register", {
@@ -153,15 +222,19 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, email, password }),
             });
-            if(response.ok) {
+            const result = await response.json();
+            if (response.ok) {
                 alert("Успішно! Тепер увійдіть.");
-                window.location.reload();
+                location.reload();
             } else {
-                alert("Помилка реєстрації");
+                if (result.detail.includes("Email")) {
+                    showError("signup-email", "signup-email-err", "Цей Email вже зайнятий");
+                } else {
+                    showError("signup-username", "signup-user-err", "Помилка реєстрації");
+                }
             }
-        } catch(err) { alert("Помилка з'єднання"); }
+        } catch(err) { console.log(err); }
     });
 </script>
-
 </body>
 </html>
