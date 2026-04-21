@@ -240,7 +240,8 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   font-size: 14px;
   line-height: 1.55;
   color: var(--text-primary) !important;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
   white-space: normal;
   overflow-x: auto;
 }
@@ -283,10 +284,11 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 .message.bot .markdown-body li > p:last-child {
   margin-bottom: 0 !important;
 }
-/* CDN: .markdown-body table { display:block } — thead/tbody виглядають «відірваними»; перебиваємо !important */
+/* Таблиці: fixed + рівномірні колонки; інакше max-content у вузькому баблі дає «1 літера в рядку» в першій колонці */
 .message.bot .markdown-body table {
   display: table !important;
-  width: max-content !important;
+  table-layout: fixed !important;
+  width: 100% !important;
   max-width: 100% !important;
   border-collapse: collapse !important;
   border-spacing: 0 !important;
@@ -317,9 +319,28 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   text-align: left !important;
   border: 1px solid var(--chat-md-cell-border) !important;
   color: var(--text-primary) !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
 }
 .message.bot .markdown-body table th {
   font-weight: 600;
+}
+/* Перша колонка: за замовчуванням вузька (№, скорочення); для 2 колонок — окремо ширше */
+.message.bot .markdown-body table th:first-child,
+.message.bot .markdown-body table td:first-child {
+  min-width: 0 !important;
+  width: 5rem !important;
+  max-width: 6.75rem !important;
+}
+.message.bot .markdown-body table:has(thead tr th:nth-child(2):last-child) th:first-child,
+.message.bot .markdown-body table:has(thead tr th:nth-child(2):last-child) td:first-child {
+  min-width: 11.5rem !important;
+  width: 34% !important;
+  max-width: 48% !important;
+}
+.message.bot .markdown-body table th:not(:first-child),
+.message.bot .markdown-body table td:not(:first-child) {
+  width: auto !important;
 }
 /* Смугастість лише в tbody; кольори змінних — світла/темна тема */
 .message.bot .markdown-body table thead tr {
@@ -488,7 +509,8 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary) !important;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
   opacity: 0.95;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body > :first-child {
@@ -504,7 +526,8 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body table {
   display: table !important;
-  width: max-content !important;
+  table-layout: fixed !important;
+  width: 100% !important;
   max-width: 100% !important;
   border-collapse: collapse !important;
   border-spacing: 0 !important;
@@ -535,9 +558,27 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   text-align: left !important;
   border: 1px solid var(--chat-md-cell-border) !important;
   color: var(--text-primary) !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body table th {
   font-weight: 600;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table th:first-child,
+.message.bot.assistant-streaming .streaming-body.markdown-body table td:first-child {
+  min-width: 0 !important;
+  width: 5rem !important;
+  max-width: 6.75rem !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table:has(thead tr th:nth-child(2):last-child) th:first-child,
+.message.bot.assistant-streaming .streaming-body.markdown-body table:has(thead tr th:nth-child(2):last-child) td:first-child {
+  min-width: 11.5rem !important;
+  width: 34% !important;
+  max-width: 48% !important;
+}
+.message.bot.assistant-streaming .streaming-body.markdown-body table th:not(:first-child),
+.message.bot.assistant-streaming .streaming-body.markdown-body table td:not(:first-child) {
+  width: auto !important;
 }
 .message.bot.assistant-streaming .streaming-body.markdown-body table thead tr {
   background-color: var(--chat-md-th-bg) !important;
