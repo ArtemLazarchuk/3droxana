@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Tuple
 
 import httpx
 import trafilatura
@@ -28,6 +29,15 @@ MAX_CONTEXT_CHARS = 28_000
 MAX_CATALOG_CHARS = 9000
 MAX_FAQ_CHARS = 10_000
 MIN_CHUNK_BUDGET = 3500
+# Якщо 1 — при «слабкому» збігу з FAQ і чанками тягнемо текст з http(s) у полі source топ-FAQ (лише в контекст запиту).
+RAG_LIVE_FETCH = os.getenv("RAG_LIVE_FETCH", "1").strip().lower() in ("1", "true", "yes")
+LIVE_FETCH_TIMEOUT = 14.0
+LIVE_FETCH_MAX_URLS = 2
+LIVE_FETCH_MAX_CHARS_PER_URL = 3200
+LIVE_FETCH_MAX_TOTAL = 6000
+# Вважаємо збіг «слабким», якщо обидва максимуми не більші за ці пороги (підлаштуйте за потреби).
+LIVE_FETCH_FAQ_SCORE_MAX = 1
+LIVE_FETCH_CHUNK_SCORE_MAX = 1
 
 
 def _split_into_chunks(text: str, max_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
@@ -113,14 +123,17 @@ async def _build_faq_context(
     db: AsyncIOMotorDatabase,
     user_message: str,
     max_chars: int,
-) -> str:
-    """Текстовий блок з видимих FAQ, відсортованих за релевантністю до запиту."""
+) -> Tuple[str, List[Tuple[int, Dict[str, Any]]], int]:
+    """
+    Текстовий блок FAQ + повний список (score, faq) за спаданням score та max_score.
+    """
     raw = await db[FAQ_COLLECTION].find({}).to_list(None)
     faqs = [f for f in raw if f.get("visible", True)]
     if not faqs:
-        return ""
+        return "", [], 0
     scored = [(_score_faq(user_message, f), f) for f in faqs]
     scored.sort(key=lambda x: (-x[0], str(x[1].get("question", ""))))
+    max_faq_score = scored[0][0] if scored else 0
     parts: List[str] = []
     used = 0
     idx = 1
@@ -132,10 +145,95 @@ async def _build_faq_context(
         used += len(block)
         idx += 1
     if not parts:
-        return ""
-    return (
+        return "", scored, max_faq_score
+    text = (
         "БАЗА FAQ (готові відповіді з бази; використовуй для фактів. "
         "URL у полі «посилання» можна брати з «Джерело», якщо це http(s):\n\n"
+        + "\n".join(parts)
+    )
+    return text, scored, max_faq_score
+
+
+async def _fetch_url_plain_text(url: str) -> str:
+    """Один HTTP-запит + trafilatura; для live-доповнення контексту (не пише в Mongo)."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=LIVE_FETCH_TIMEOUT,
+            follow_redirects=True,
+            headers={"User-Agent": "3droxana-rag-live/1.0"},
+        ) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            html = response.text
+        extracted = await asyncio.to_thread(
+            trafilatura.extract,
+            html,
+            url=url,
+            include_comments=False,
+            include_tables=True,
+        )
+        raw = (extracted or "").strip()
+        raw = re.sub(r"\s+", " ", raw)
+        if len(raw) > LIVE_FETCH_MAX_CHARS_PER_URL:
+            raw = raw[: LIVE_FETCH_MAX_CHARS_PER_URL - 40] + " […]"
+        return raw
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("live_fetch failed %s: %s", url[:100], exc)
+        return ""
+
+
+async def _build_live_faq_source_block(
+    scored_faqs: List[Tuple[int, Dict[str, Any]]],
+    max_faq_score: int,
+    max_chunk_score: int,
+    user_message: str,
+) -> str:
+    """
+    Якщо у базі слабкий збіг запиту з FAQ і з чанками — тягнемо свіжий текст з поля source
+    у найрелевантніших FAQ (http/https), щоб модель могла відповісти зі сторінки.
+    """
+    if not RAG_LIVE_FETCH or not scored_faqs:
+        return ""
+    cleaned = (user_message or "").strip()
+    if len(cleaned) < 4:
+        return ""
+    if max_faq_score > LIVE_FETCH_FAQ_SCORE_MAX or max_chunk_score > LIVE_FETCH_CHUNK_SCORE_MAX:
+        return ""
+
+    seen: Set[str] = set()
+    urls: List[str] = []
+    for _sc, faq in scored_faqs:
+        src = (faq.get("source") or "").strip()
+        if not src.startswith(("http://", "https://")):
+            continue
+        if src in seen:
+            continue
+        seen.add(src)
+        urls.append(src)
+        if len(urls) >= LIVE_FETCH_MAX_URLS:
+            break
+    if not urls:
+        return ""
+
+    texts = await asyncio.gather(*[_fetch_url_plain_text(u) for u in urls])
+    parts: List[str] = []
+    total = 0
+    for u, t in zip(urls, texts):
+        if not t:
+            continue
+        block = f"### Свіжий текст зі сторінки (за запитом)\nURL: {u}\n\n{t}\n"
+        if total + len(block) > LIVE_FETCH_MAX_TOTAL:
+            room = LIVE_FETCH_MAX_TOTAL - total - 100
+            if room < 200:
+                break
+            block = f"### Свіжий текст зі сторінки (за запитом)\nURL: {u}\n\n{t[:room]}…\n"
+        parts.append(block)
+        total += len(block)
+    if not parts:
+        return ""
+    return (
+        "ДОДАТКОВИЙ КОНТЕКСТ (слабкий збіг з FAQ і чанками; текст знято зі сторінок поля «Джерело» "
+        "у найрелевантніших записах FAQ; використовуй для фактів, якщо це доповнює відповідь):\n\n"
         + "\n".join(parts)
     )
 
@@ -276,7 +374,7 @@ async def build_rag_context(
     """
     Контекст для LLM: FAQ + каталог посилань + релевантні чанки зі сторінок.
     """
-    faq_block = await _build_faq_context(db, user_message, MAX_FAQ_CHARS)
+    faq_block, faq_scored, max_faq_score = await _build_faq_context(db, user_message, MAX_FAQ_CHARS)
     faq_len = len(faq_block)
 
     raw = await db["links"].find({}).to_list(None)
@@ -284,7 +382,10 @@ async def build_rag_context(
 
     if not links:
         if faq_block:
-            return faq_block
+            live = await _build_live_faq_source_block(
+                faq_scored, max_faq_score, 0, user_message
+            )
+            return faq_block if not live else f"{faq_block}\n\n---\n\n{live}"
         return "(Немає даних у базі: ні посилань, ні FAQ.)"
 
     for link in links:
@@ -302,12 +403,14 @@ async def build_rag_context(
     chunk_budget = max(MIN_CHUNK_BUDGET, max_chars - faq_len - cat_len - 350)
 
     chunk_parts: List[str] = []
+    max_chunk_score = 0
     if all_chunks:
         scored: List[tuple[int, Dict[str, Any]]] = []
         for ch in all_chunks:
             lid = ch["link_id"]
             link = link_by_id.get(lid)
             score = _score_chunk(user_message, ch.get("text", ""), link)
+            max_chunk_score = max(max_chunk_score, score)
             scored.append((score, ch))
 
         scored.sort(
@@ -354,11 +457,17 @@ async def build_rag_context(
     elif links:
         chunks_body = "Уривків зі сторінок немає; використовуй FAQ і каталог посилань.\n"
 
+    live_block = await _build_live_faq_source_block(
+        faq_scored, max_faq_score, max_chunk_score, user_message
+    )
+
     sections: List[str] = []
     if faq_block:
         sections.append(faq_block)
     sections.append(catalog)
     if chunks_body:
         sections.append(chunks_body)
+    if live_block:
+        sections.append(live_block)
 
     return "\n\n---\n\n".join(sections)
