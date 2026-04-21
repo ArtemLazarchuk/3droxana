@@ -84,6 +84,68 @@
         .input-group-container {
             margin-bottom: 15px;
         }
+
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #888;
+            font-size: 0.8rem;
+            margin: 1.25rem 0 1rem;
+        }
+        /* «або» після кнопки «Увійти», перед Google */
+        .auth-divider.auth-divider--below-primary {
+            margin-top: 1.15rem;
+            margin-bottom: 0.85rem;
+        }
+        .auth-divider::before,
+        .auth-divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--border-color, #444);
+        }
+
+        .btn-google {
+            display: none;
+            width: 100%;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid #444 !important;
+            background: #2b2b2b !important;
+            color: #fff !important;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .btn-google:hover {
+            background: #353535 !important;
+            border-color: #666 !important;
+            color: #fff !important;
+        }
+        .btn-google.is-visible {
+            display: inline-flex;
+        }
+
+        #google-oauth-hint {
+            display: none;
+            font-size: 0.78rem;
+            line-height: 1.45;
+            color: #8a8a95;
+            text-align: left;
+            margin: 0 0 0.75rem;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid #3a3a45;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        #google-oauth-hint code {
+            font-size: 0.85em;
+            color: #c8c8d4;
+        }
     </style>
 </head>
 <body>
@@ -92,6 +154,15 @@
     <img src="/static/images/avatar1.png" alt="Avatar" class="rounded-circle mb-3" width="80" height="80" style="border: 2px solid var(--accent-color); padding: 3px;">
     
     <h2 id="form-title" class="mb-4 fw-bold text-white">Вхід</h2>
+
+    <p id="google-oauth-hint" aria-live="polite">
+        Кнопки «через Google» тут немає, доки бекенд не бачить ключі OAuth.
+        Додайте у файл <code>.env</code> змінні <code>GOOGLE_CLIENT_ID</code> та
+        <code>GOOGLE_CLIENT_SECRET</code> (з Google Cloud Console), перезапустіть
+        сервер і оновіть сторінку. Окремої кнопки «Chrome» не потрібно — після
+        натискання «Продовжити з Google» вхід відбувається у вашому браузері
+        (зокрема Chrome). Деталі — у README, розділ «Вхід через Google».
+    </p>
 
     <!-- ФОРМА ВХОДУ -->
     <form id="signin-form">
@@ -106,6 +177,18 @@
         <div id="signin-server-err" class="error-feedback" style="display: none;"></div>
         <button type="submit" class="btn btn-auth">Увійти</button>
     </form>
+
+    <div id="google-oauth-below">
+        <div
+            id="google-divider"
+            class="auth-divider auth-divider--below-primary"
+            style="display: none;"
+        >або</div>
+        <a id="google-signin-btn" class="btn-google" href="/api/users/auth/google/start">
+            <i class="bi bi-google"></i>
+            Продовжити з Google
+        </a>
+    </div>
 
     <!-- ФОРМА РЕЄСТРАЦІЇ -->
     <form id="signup-form" class="d-none">
@@ -135,6 +218,58 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    (async function initGoogleButton() {
+        const btn = document.getElementById("google-signin-btn");
+        const divider = document.getElementById("google-divider");
+        const hint = document.getElementById("google-oauth-hint");
+        if (!btn || !divider) return;
+        try {
+            const r = await fetch("/api/users/auth/google/status");
+            const j = await r.json();
+            if (j && j.enabled) {
+                btn.classList.add("is-visible");
+                divider.style.display = "flex";
+                if (hint) hint.style.display = "none";
+            } else if (hint) {
+                hint.style.display = "block";
+            }
+        } catch (_) {
+            if (hint) {
+                hint.innerHTML =
+                    "Не вдалося запитати <code>/api/users/auth/google/status</code> — переконайтесь, що сторінка відкрита з того ж хоста/порту, що й API (наприклад <code>http://localhost:8001/auth</code>), і що сервер запущено.";
+                hint.style.display = "block";
+            }
+        }
+    })();
+
+    const OAUTH_ERR_UK = {
+        access_denied: "Вхід скасовано або Google не надав доступ.",
+        missing_code: "Некоректна відповідь від Google. Спробуйте ще раз.",
+        not_configured: "Сервер не налаштовано для Google-входу.",
+        invalid_state: "Закінчився час сесії OAuth. Спробуйте ще раз.",
+        token_exchange: "Не вдалося обміняти код на токен (перевірте Client Secret і redirect URI).",
+        no_access_token: "Google не повернув токен доступу.",
+        userinfo: "Не вдалося отримати профіль з Google.",
+        network: "Помилка мережі під час звернення до Google.",
+        no_email: "У Google-акаунта немає підтвердженої пошти.",
+        email_not_verified: "Підтвердіть email у Google і спробуйте знову.",
+        email_linked_other_google: "Ця пошта вже прив’язана до іншого Google-акаунта.",
+        create_failed: "Не вдалося створити користувача. Спробуйте пізніше.",
+    };
+
+    const q = new URLSearchParams(window.location.search);
+    const oauthErr = q.get("oauth_error");
+    if (oauthErr) {
+        const serverEl = document.getElementById("signin-server-err");
+        if (serverEl) {
+            serverEl.textContent =
+                OAUTH_ERR_UK[oauthErr] ||
+                "Помилка входу через Google: " + oauthErr;
+            serverEl.style.display = "block";
+        }
+        window.history.replaceState({}, "", "/auth");
+    }
+
     const toggleLink = document.getElementById("toggle-link");
     const title = document.getElementById("form-title");
     const toggleText = document.getElementById("toggle-text");
@@ -169,14 +304,17 @@
         e.preventDefault();
         clearErrors();
         const isLogin = !signInForm.classList.contains("d-none");
+        const googleBelow = document.getElementById("google-oauth-below");
         if (isLogin) {
             signInForm.classList.add("d-none"); signUpForm.classList.remove("d-none");
             title.textContent = "Реєстрація";
             toggleText.innerHTML = 'Вже є акаунт? <a href="#" id="toggle-link" class="text-white text-decoration-none fw-bold">Увійти</a>';
+            if (googleBelow) googleBelow.classList.add("d-none");
         } else {
             signInForm.classList.remove("d-none"); signUpForm.classList.add("d-none");
             title.textContent = "Вхід";
             toggleText.innerHTML = 'Ще не маєте акаунту? <a href="#" id="toggle-link" class="text-white text-decoration-none fw-bold">Зареєструватися</a>';
+            if (googleBelow) googleBelow.classList.remove("d-none");
         }
         document.getElementById("toggle-link").onclick = (ev) => { ev.preventDefault(); toggleLink.click(); };
     });

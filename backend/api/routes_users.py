@@ -1,13 +1,24 @@
+import json
 from datetime import datetime, timedelta
 from typing import Optional
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException
-from jose import jwt
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
 
 from ..auth.deps import get_current_user
-from ..config import JWT_ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM, JWT_SECRET_KEY
+from ..config import (
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+    JWT_ALGORITHM,
+    JWT_SECRET_KEY,
+    PUBLIC_APP_BASE_URL,
+)
 from ..db.mongodb import get_database
 from ..models import users as user_model
 from ..schemas import users as user_schema
@@ -35,6 +46,31 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def _google_oauth_configured() -> bool:
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
+
+def _app_base_url(request: Request) -> str:
+    if PUBLIC_APP_BASE_URL:
+        return PUBLIC_APP_BASE_URL
+    return str(request.base_url).rstrip("/")
+
+
+def _google_redirect_uri(request: Request) -> str:
+    return f"{_app_base_url(request)}/api/users/auth/google/callback"
+
+
+def _google_oauth_state_token() -> str:
+    return jwt.encode(
+        {
+            "purpose": "google_oauth",
+            "exp": datetime.utcnow() + timedelta(minutes=15),
+        },
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (
@@ -45,6 +81,151 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
+
+
+@router.get("/auth/google/status")
+async def google_oauth_status():
+    """Чи увімкнено вхід через Google (для кнопки на /auth)."""
+    return {"enabled": _google_oauth_configured()}
+
+
+@router.get("/auth/google/start")
+async def google_oauth_start(request: Request):
+    if not _google_oauth_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Вхід через Google не налаштовано (немає GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).",
+        )
+    state = _google_oauth_state_token()
+    q = urlencode(
+        {
+            "client_id": GOOGLE_CLIENT_ID,
+            "redirect_uri": _google_redirect_uri(request),
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": state,
+            "prompt": "select_account",
+        }
+    )
+    return RedirectResponse(
+        url=f"https://accounts.google.com/o/oauth2/v2/auth?{q}",
+        status_code=302,
+    )
+
+
+@router.get("/auth/google/callback")
+async def google_oauth_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    db=Depends(get_database),
+):
+    if error:
+        return RedirectResponse(url=f"/auth?oauth_error={error}", status_code=302)
+    if not code or not state:
+        return RedirectResponse(url="/auth?oauth_error=missing_code", status_code=302)
+    if not _google_oauth_configured():
+        return RedirectResponse(url="/auth?oauth_error=not_configured", status_code=302)
+
+    try:
+        payload = jwt.decode(state, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        if payload.get("purpose") != "google_oauth":
+            raise JWTError()
+    except JWTError:
+        return RedirectResponse(url="/auth?oauth_error=invalid_state", status_code=302)
+
+    redirect_uri = _google_redirect_uri(request)
+    try:
+        async with httpx.AsyncClient() as client:
+            tr = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code",
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=30.0,
+            )
+        if tr.status_code != 200:
+            return RedirectResponse(
+                url="/auth?oauth_error=token_exchange", status_code=302
+            )
+        g_tokens = tr.json()
+        g_access = g_tokens.get("access_token")
+        if not g_access:
+            return RedirectResponse(
+                url="/auth?oauth_error=no_access_token", status_code=302
+            )
+        async with httpx.AsyncClient() as client:
+            ui = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {g_access}"},
+                timeout=20.0,
+            )
+        if ui.status_code != 200:
+            return RedirectResponse(url="/auth?oauth_error=userinfo", status_code=302)
+        info = ui.json()
+    except httpx.HTTPError:
+        return RedirectResponse(url="/auth?oauth_error=network", status_code=302)
+
+    google_sub = str(info.get("id") or "")
+    email = (info.get("email") or "").strip().lower()
+    if not google_sub or not email:
+        return RedirectResponse(url="/auth?oauth_error=no_email", status_code=302)
+    if not info.get("verified_email"):
+        return RedirectResponse(url="/auth?oauth_error=email_not_verified", status_code=302)
+
+    name = (info.get("name") or "").strip() or email.split("@", 1)[0]
+
+    user_raw = await user_model.get_user_by_email(db, email)
+    if user_raw:
+        existing_sub = user_raw.get("google_sub")
+        if existing_sub and existing_sub != google_sub:
+            return RedirectResponse(
+                url="/auth?oauth_error=email_linked_other_google", status_code=302
+            )
+        if not existing_sub:
+            await user_model.update_user(
+                db, str(user_raw["_id"]), {"google_sub": google_sub}
+            )
+            user_raw = await user_model.get_user_by_email(db, email)
+    else:
+        new_doc = {
+            "username": name[:120],
+            "email": email,
+            "tgNick": "",
+            "google_sub": google_sub,
+        }
+        await user_model.create_user(db, new_doc)
+        user_raw = await user_model.get_user_by_email(db, email)
+        if not user_raw:
+            return RedirectResponse(
+                url="/auth?oauth_error=create_failed", status_code=302
+            )
+
+    user = user_model.serialize_user(user_raw)
+    access_token = create_access_token(data={"sub": user["id"], "email": user["email"]})
+
+    user_json = json.dumps(user, ensure_ascii=False)
+    script_user_literal = json.dumps(user_json)
+    script_token_literal = json.dumps(access_token)
+    html = f"""<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"><title>Вхід…</title></head>
+<body>
+<script>
+localStorage.setItem("access_token", {script_token_literal});
+localStorage.setItem("user", {script_user_literal});
+window.location.replace("/chat");
+</script>
+<noscript><p>Увімкніть JavaScript і відкрийте <a href="/chat">чат</a>.</p></noscript>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 @router.get("/", response_model=list[user_schema.UserOut])
@@ -75,7 +256,12 @@ async def login_user(login: UserLogin, db=Depends(get_database)):
         raise HTTPException(status_code=401, detail="Невірна пошта або пароль")
 
     stored_hash = user_raw.get("password")
-    if not stored_hash or not verify_password(login.password, stored_hash):
+    if not stored_hash:
+        raise HTTPException(
+            status_code=401,
+            detail="Для цього акаунта пароль не задано — увійдіть через Google.",
+        )
+    if not verify_password(login.password, stored_hash):
         raise HTTPException(status_code=401, detail="Невірна пошта або пароль")
 
     # Серіалізуємо користувача перед віддачею (без пароля)

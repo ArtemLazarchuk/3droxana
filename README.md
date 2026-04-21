@@ -59,14 +59,18 @@ python -m pip install -r requirements.txt
 
 На macOS, якщо venv ще **не** активовано, можна одноразово викликати: `python3 -m pip install -r requirements.txt` — але краще спочатку активувати venv, щоб пакети ставили саме в нього.
 
-### 5. Налаштувати секрети через `.env`
+### 5. Налаштувати секрети через `.env` (Можна звернутись до розробників по секрети)
 
 У корені проєкту створіть файл `.env` (він уже доданий у `.gitignore`, тому не потрапить у git) з таким вмістом **(значення замініть на свої)**:
 
+
 ```env
-MONGODB_URI="mongodb+srv://polishchukmariyatv21:LspA8MqTknfK535S@3davatar.jd7ic5f.mongodb.net/"
+MONGODB_URI="mongodb://localhost:27017"
 DATABASE_NAME="3davatar"
-TOGETHER_API_KEY="137f302b0bb50bb26cbf1f491b2bf183bf54c1bebd7df461ac9d0441f8f7f9d7"
+TOGETHER_API_KEY="ваш-ключ-Together"
+
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
 ```
 
 - `MONGODB_URI` — повний URI до вашого MongoDB/Atlas‑кластера.
@@ -101,9 +105,12 @@ docker build -t 3droxana .
 
 ```bash
 docker run -p 8000:8000 \
-  -e MONGODB_URI="mongodb+srv://polishchukmariyatv21:LspA8MqTknfK535S@3davatar.jd7ic5f.mongodb.net/" \
+  -e MONGODB_URI="mongodb://..." \
   -e DATABASE_NAME="3davatar" \
-  -e TOGETHER_API_KEY="137f302b0bb50bb26cbf1f491b2bf183bf54c1bebd7df461ac9d0441f8f7f9d7" \
+  -e TOGETHER_API_KEY="ваш-ключ" \
+  -e JWT_SECRET_KEY="випадковий-рядок" \
+  -e GOOGLE_CLIENT_ID="" \
+  -e GOOGLE_CLIENT_SECRET="" \
   3droxana
 ```
 
