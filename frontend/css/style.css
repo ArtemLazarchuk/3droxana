@@ -180,6 +180,8 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 /* Нижня панель сайдбару: кнопка профілю (фото / ініціали + ім’я + пошта) + меню */
 .sidebar-footer {
   padding: 12px;
+  /* Одна лінія з темою чату; без Bootstrap border-secondary — інакше «з’їжджає» відносно правої панелі */
+  border-top: 1px solid var(--border-color);
 }
 .sidebar-login-row {
   display: block;
@@ -845,9 +847,9 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 /* === 5. ВВІД === */
 .input-area {
   position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 20px 30px 30px 30px;
+  /* Менше відступу зверху — поле й кнопки візуально ближче до низу; без border-top — межа лише зліва в сайдбарі */
+  padding: 8px 24px 14px 24px;
   background-color: var(--bg-color);
-  border-top: 1px solid var(--border-color);
   z-index: 10;
 }
 
