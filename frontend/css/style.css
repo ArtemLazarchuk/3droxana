@@ -716,7 +716,8 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
 /* === 6. АВАТАР (GLASSMORPHISM) === */
 .avatar-fixed {
   position: fixed;
-  bottom: 40px;
+  /* Вище за старий 40px: відступ від низу залежить від висоти вікна, щоб не накладатися на поле вводу */
+  bottom: clamp(120px, 22vh, 300px);
   right: 30px;
   width: 240px;
   min-width: 150px;

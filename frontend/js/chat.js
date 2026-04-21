@@ -192,6 +192,19 @@ window.addEventListener("DOMContentLoaded", async () => {
     const avatarBox = document.querySelector('.avatar-fixed');
     const resizeHandle = document.querySelector('.resize-handle');
     const themeToggle = document.getElementById("theme-toggle");
+
+    /** Дефолтна позиція аватара: над блоком вводу (після drag залишаються top/left — не чіпаємо). */
+    function syncAvatarDefaultBottom() {
+        if (!avatarBox) return;
+        if (avatarBox.style.top) return;
+        const inputBar = document.querySelector(".input-area");
+        if (!inputBar) return;
+        const gap = 20;
+        const h = inputBar.getBoundingClientRect().height;
+        avatarBox.style.bottom = `${Math.ceil(h + gap)}px`;
+    }
+    requestAnimationFrame(() => syncAvatarDefaultBottom());
+    window.addEventListener("resize", () => requestAnimationFrame(syncAvatarDefaultBottom));
     const confirmLogout = document.getElementById("confirmLogout");
 
     function applyAvatarEmotion(data) {
@@ -479,6 +492,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             console.error("Помилка завантаження повідомлень", e);
             appendMessage("bot", "Помилка зв'язку з сервером."); 
         }
+        requestAnimationFrame(() => syncAvatarDefaultBottom());
     }
 
     function syncAttachButton() {
