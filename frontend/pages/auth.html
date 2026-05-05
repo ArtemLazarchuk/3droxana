@@ -31,7 +31,6 @@
             text-align: center;
         }
 
-        /* Стиль полів вводу: темний фон, білий текст */
         .form-control {
             background-color: #2b2b2b !important;
             border: 1px solid #444 !important;
@@ -50,7 +49,6 @@
             box-shadow: 0 0 0 0.25rem rgba(138, 79, 255, 0.25) !important;
         }
 
-        /* Стиль фіолетової кнопки */
         .btn-auth {
             background-color: var(--accent-color) !important;
             color: white !important;
@@ -68,13 +66,12 @@
             transform: translateY(-2px);
         }
 
-        /* Повідомлення про помилки */
         .error-feedback {
             color: #ff5f5f;
             font-size: 0.85rem;
             text-align: left;
             margin-bottom: 10px;
-            display: none; /* Показуємо через JS */
+            display: none;
         }
 
         .is-invalid {
@@ -85,7 +82,6 @@
             margin-bottom: 15px;
         }
 
-        /* Аватар: круг обрізається в обгортці; кільце — box-shadow (без «зубців» як у border на img) */
         .auth-avatar-ring {
             width: 88px;
             height: 88px;
@@ -117,11 +113,6 @@
             color: #888;
             font-size: 0.8rem;
             margin: 1.25rem 0 1rem;
-        }
-        /* «або» після кнопки «Увійти», перед Google */
-        .auth-divider.auth-divider--below-primary {
-            margin-top: 1.15rem;
-            margin-bottom: 0.85rem;
         }
         .auth-divider::before,
         .auth-divider::after {
@@ -167,35 +158,137 @@
             border: 1px solid #3a3a45;
             background: rgba(0, 0, 0, 0.2);
         }
-        #google-oauth-hint code {
-            font-size: 0.85em;
-            color: #c8c8d4;
+
+        .input-group-container {
+            position: relative !important;
+            width: 100% !important;
+            margin-bottom: 15px !important;
         }
+
+        .password-toggle-icon {
+            position: absolute !important;
+            right: 15px !important;
+            top: 24px !important; 
+            transform: translateY(-50%) !important;
+            cursor: pointer !important;
+            color: #adb5bd !important;
+            font-size: 1.2rem !important;
+            z-index: 100 !important;
+        }
+
+        .form-control[type="password"], 
+        .form-control[type="text"] {
+            padding-right: 45px !important;
+        }
+
+        input:-webkit-autofill {
+            -webkit-text-fill-color: white !important;
+            -webkit-box-shadow: 0 0 0px 1000px #2b2b2b inset !important;
+        }
+
+        /* --- СТИЛІ ДЛЯ НОВОГО МОДАЛЬНОГО ВІКНА В СТИЛІ "ВИХІД" --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none; /* Показуємо через JS */
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .custom-modal {
+            background: #1e1e1e;
+            width: 400px;
+            border-radius: 14px;
+            border: 1px solid #333;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+
+        .modal-header-custom {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+
+        .modal-header-custom h5 {
+            margin: 0; color: white; font-size: 1.1rem;
+        }
+
+        .modal-body-custom {
+            padding: 20px;
+            color: #bbb;
+            font-size: 1rem;
+            text-align: left;
+        }
+
+        .modal-footer-custom {
+            padding: 12px 20px;
+            background: #181818;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .btn-modal-ok {
+            background-color: var(--accent-color) !important;
+            color: white; border: none; padding: 8px 25px; border-radius: 8px; font-weight: 600; cursor: pointer;
+        }
+      /* 1. Прибираємо білий фон при автозаповненні Chrome/Safari */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+    /* Текст стає білим */
+    -webkit-text-fill-color: white !important;
+    /* Замінюємо білий фон внутрішньою тінню потрібного кольору (#2b2b2b — ваш темний фон) */
+    -webkit-box-shadow: 0 0 0px 1000px #2b2b2b inset !important;
+    /* Колір курсору */
+    caret-color: white !important;
+}
+
+/* 2. Додатково фіксуємо фокус, щоб при натисканні поле теж не ставало світлим */
+.form-control:focus {
+    background-color: #2b2b2b !important;
+    color: white !important;
+}
+
+/* 3. Для Firefox (якщо актуально) */
+input:filter(autofill) {
+    background-color: #2b2b2b !important;
+}  
     </style>
 </head>
 <body>
 
+<!-- HTML НОВОЇ МОДАЛКИ -->
+<div id="success-modal" class="modal-overlay">
+    <div class="custom-modal">
+        <div class="modal-header-custom">
+            <h5>Реєстрація</h5>
+            <i class="bi bi-x-lg" style="cursor:pointer; color: #888;" onclick="closeModal()"></i>
+        </div>
+        <div class="modal-body-custom">
+            Ви успішно зареєструвалися! Тепер ви можете увійти у свій акаунт.
+        </div>
+        <div class="modal-footer-custom">
+            <button class="btn-modal-ok" onclick="closeModal()">OK</button>
+        </div>
+    </div>
+</div>
+
 <div class="auth-card">
     <div class="auth-avatar-ring" aria-hidden="true">
-        <img
-            src="/static/images/avatar1.png"
-            alt=""
-            width="176"
-            height="176"
-            decoding="async"
-            fetchpriority="low"
-        >
+        <img src="/static/images/avatar1.png" alt="" width="176" height="176">
     </div>
     
     <h2 id="form-title" class="mb-4 fw-bold text-white">Вхід</h2>
 
     <p id="google-oauth-hint" aria-live="polite">
-        Кнопки «через Google» тут немає, доки бекенд не бачить ключі OAuth.
-        Додайте у файл <code>.env</code> змінні <code>GOOGLE_CLIENT_ID</code> та
-        <code>GOOGLE_CLIENT_SECRET</code> (з Google Cloud Console), перезапустіть
-        сервер і оновіть сторінку. Окремої кнопки «Chrome» не потрібно — після
-        натискання «Продовжити з Google» вхід відбувається у вашому браузері
-        (зокрема Chrome). Деталі — у README, розділ «Вхід через Google».
+        Кнопки «через Google» тут немає, доки бекенд не бачить ключі OAuth...
     </p>
 
     <!-- ФОРМА ВХОДУ -->
@@ -206,6 +299,7 @@
         </div>
         <div class="input-group-container">
             <input type="password" class="form-control" id="signin-password" placeholder="Пароль" required>
+            <i class="bi bi-eye-slash password-toggle-icon" id="toggle-signin-password"></i>
             <div id="signin-pass-err" class="error-feedback"></div>
         </div>
         <div id="signin-server-err" class="error-feedback" style="display: none;"></div>
@@ -213,14 +307,9 @@
     </form>
 
     <div id="google-oauth-below">
-        <div
-            id="google-divider"
-            class="auth-divider auth-divider--below-primary"
-            style="display: none;"
-        >або</div>
+        <div id="google-divider" class="auth-divider auth-divider--below-primary" style="display: none;">або</div>
         <a id="google-signin-btn" class="btn-google" href="/api/users/auth/google/start">
-            <i class="bi bi-google"></i>
-            Продовжити з Google
+            <i class="bi bi-google"></i> Продовжити з Google
         </a>
     </div>
 
@@ -236,10 +325,12 @@
         </div>
         <div class="input-group-container">
             <input type="password" class="form-control" id="signup-password" placeholder="Пароль (мін. 6 симв.)" required>
+            <i class="bi bi-eye-slash password-toggle-icon" id="toggle-signup-password"></i>
             <div id="signup-pass-err" class="error-feedback"></div>
         </div>
         <div class="input-group-container">
             <input type="password" class="form-control" id="signup-confirm" placeholder="Повторіть пароль" required>
+            <i class="bi bi-eye-slash password-toggle-icon" id="toggle-signup-confirm"></i>
             <div id="signup-confirm-err" class="error-feedback"></div>
         </div>
         <button type="submit" class="btn btn-auth">Створити акаунт</button>
@@ -252,6 +343,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    // ФУНКЦІЇ МОДАЛКИ
+    function openModal() { document.getElementById('success-modal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('success-modal').style.display = 'none'; location.reload(); }
+
     (async function initGoogleButton() {
         const btn = document.getElementById("google-signin-btn");
         const divider = document.getElementById("google-divider");
@@ -267,13 +362,7 @@
             } else if (hint) {
                 hint.style.display = "block";
             }
-        } catch (_) {
-            if (hint) {
-                hint.innerHTML =
-                    "Не вдалося запитати <code>/api/users/auth/google/status</code> — переконайтесь, що сторінка відкрита з того ж хоста/порту, що й API (наприклад <code>http://localhost:8001/auth</code>), і що сервер запущено.";
-                hint.style.display = "block";
-            }
-        }
+        } catch (_) {}
     })();
 
     const OAUTH_ERR_UK = {
@@ -281,7 +370,7 @@
         missing_code: "Некоректна відповідь від Google. Спробуйте ще раз.",
         not_configured: "Сервер не налаштовано для Google-входу.",
         invalid_state: "Закінчився час сесії OAuth. Спробуйте ще раз.",
-        token_exchange: "Не вдалося обміняти код на токен (перевірте Client Secret і redirect URI).",
+        token_exchange: "Не вдалося обміняти код на токен.",
         no_access_token: "Google не повернув токен доступу.",
         userinfo: "Не вдалося отримати профіль з Google.",
         network: "Помилка мережі під час звернення до Google.",
@@ -296,9 +385,7 @@
     if (oauthErr) {
         const serverEl = document.getElementById("signin-server-err");
         if (serverEl) {
-            serverEl.textContent =
-                OAUTH_ERR_UK[oauthErr] ||
-                "Помилка входу через Google: " + oauthErr;
+            serverEl.textContent = OAUTH_ERR_UK[oauthErr] || "Помилка входу через Google: " + oauthErr;
             serverEl.style.display = "block";
         }
         window.history.replaceState({}, "", "/auth");
@@ -358,55 +445,21 @@
         clearErrors();
         const email = document.getElementById("signin-email").value;
         const password = document.getElementById("signin-password").value;
-
         try {
             const response = await fetch("/api/users/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password }),
             });
-            let result = {};
-            try {
-                result = await response.json();
-            } catch (_) {
-                /* не JSON (рідко) */
-            }
-            const detailStr = detailToString(result.detail);
-
+            let result = await response.json();
             if (response.ok) {
                 localStorage.setItem('user', JSON.stringify(result.user));
-                if (result.access_token) {
-                    localStorage.setItem('access_token', result.access_token);
-                }
+                if (result.access_token) localStorage.setItem('access_token', result.access_token);
                 window.location.href = "/chat";
                 return;
             }
-
-            if (response.status >= 500) {
-                const serverEl = document.getElementById("signin-server-err");
-                if (serverEl) {
-                    serverEl.textContent =
-                        "Помилка на сервері під час входу (наприклад, застарілий формат пароля в базі). Спробуйте ще раз або зареєструйте новий акаунт. Деталі: "
-                        + (detailStr || response.statusText || "без опису");
-                    serverEl.style.display = "block";
-                }
-                return;
-            }
-
-            const low = detailStr.toLowerCase();
-            if (low.includes("email") || low.includes("found")) {
-                showError("signin-email", "signin-email-err", "Користувача не знайдено");
-            } else {
-                showError("signin-password", "signin-pass-err", detailStr || "Невірна пошта або пароль");
-            }
-        } catch (err) {
-            const serverEl = document.getElementById("signin-server-err");
-            if (serverEl) {
-                serverEl.textContent = "Немає зв'язку з сервером. Перевірте мережу та спробуйте ще раз.";
-                serverEl.style.display = "block";
-            }
-            console.error(err);
-        }
+            showError("signin-password", "signin-pass-err", "Невірна пошта або пароль");
+        } catch (err) { console.error(err); }
     });
 
     signUpForm.addEventListener("submit", async (e) => {
@@ -417,16 +470,14 @@
         const password = document.getElementById("signup-password").value;
         const confirm = document.getElementById("signup-confirm").value;
 
-        let hasError = false;
         if (password.length < 6) {
             showError("signup-password", "signup-pass-err", "Пароль має бути мін. 6 символів");
-            hasError = true;
+            return;
         }
         if (password !== confirm) {
             showError("signup-confirm", "signup-confirm-err", "Паролі не збігаються");
-            hasError = true;
+            return;
         }
-        if (hasError) return;
 
         try {
             const response = await fetch("/api/users/register", {
@@ -436,10 +487,11 @@
             });
             const result = await response.json();
             if (response.ok) {
-                alert("Успішно! Тепер увійдіть.");
-                location.reload();
+                // ТУТ ЗАМІНЕНО ALERT НА МОДАЛКУ
+                openModal();
             } else {
-                if (result.detail.includes("Email")) {
+                const det = detailToString(result.detail);
+                if (det.includes("Email")) {
                     showError("signup-email", "signup-email-err", "Цей Email вже зайнятий");
                 } else {
                     showError("signup-username", "signup-user-err", "Помилка реєстрації");
@@ -447,6 +499,22 @@
             }
         } catch(err) { console.log(err); }
     });
+
+    function initPasswordToggle(inputId, iconId) {
+        const input = document.getElementById(inputId);
+        const icon = document.getElementById(iconId);
+        if (input && icon) {
+            icon.addEventListener('click', () => {
+                const isPassword = input.type === 'password';
+                input.type = isPassword ? 'text' : 'password';
+                icon.classList.toggle('bi-eye');
+                icon.classList.toggle('bi-eye-slash');
+            });
+        }
+    }
+    initPasswordToggle('signin-password', 'toggle-signin-password');
+    initPasswordToggle('signup-password', 'toggle-signup-password');
+    initPasswordToggle('signup-confirm', 'toggle-signup-confirm');
 </script>
 </body>
 </html>
