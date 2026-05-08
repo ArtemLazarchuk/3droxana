@@ -323,6 +323,17 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   background: var(--sidebar-account-row-hover);
   color: var(--text-primary);
 }
+/* Посилання того ж вигляду, що кнопки в меню акаунта */
+a.sidebar-account-main-row,
+a.sidebar-account-main-row:link,
+a.sidebar-account-main-row:visited {
+  text-decoration: none;
+  color: inherit;
+}
+a.sidebar-account-main-row:focus-visible {
+  outline: 2px solid var(--accent-color, #6f42c1);
+  outline-offset: 2px;
+}
 .sidebar-account-main-icon {
   display: flex;
   width: 22px;

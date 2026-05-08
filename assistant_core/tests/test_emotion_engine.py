@@ -27,6 +27,7 @@ import pytest
 from assistant_core.emotion_engine import (
     ANIMATION_CLIP_FILES,
     AvatarController,
+    CONFIDENCE_THRESHOLD,
     ContextWindow,
     EMOTION_LIST,
     EmotionClassifier,
@@ -201,6 +202,16 @@ class TestScoreAggregator:
         emotion, conf = self.agg.decide(raw, normalized)
         assert emotion == "neutral"
 
+    def test_decide_softmax_argmax_when_flat_but_beats_neutral(self):
+        """Плоский softmax: якщо argmax не neutral і p_top > p_neutral — не підміняємо на neutral."""
+        raw = {e: 1.0 for e in EMOTION_LIST}
+        raw["sad"] = 1.08
+        normalized = self.agg.softmax(raw)
+        emotion, conf = self.agg.decide(raw, normalized)
+        assert emotion == "sad"
+        assert conf < CONFIDENCE_THRESHOLD
+        assert conf > normalized["neutral"]
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 6. ContextWindow
@@ -248,8 +259,19 @@ class TestTransitionMatrix:
         scores["sad"] = 0.99
         scores["neutral"] = 0.01
         emotion, conf = self.tm.best_allowed("happy", scores)
-        # sad дозволено, бо confidence=0.99×0.3=0.297 ≈ 0.30 — правило «≥»
         assert emotion in {"sad", "neutral"}
+
+    def test_best_allowed_prefers_softmax_top_over_stale_happy(self):
+        """Не лишаємось у happy з низькою p, коли діаграма лідирує thinking."""
+        scores = {
+            e: 0.10
+            for e in EMOTION_LIST
+        }
+        scores["thinking"] = 0.234
+        scores["happy"] = 0.123
+        scores["neutral"] = 0.135
+        em, _ = self.tm.best_allowed("happy", scores)
+        assert em == "thinking"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -97,6 +97,14 @@ ANIMATION_CLIP_FILES: Tuple[str, ...] = (
 # Мінімальна впевненість для зміни стану аватара (нижче — лишаємо neutral)
 CONFIDENCE_THRESHOLD = 0.30
 
+# На переході neutral → не-neutral: окремий нижній поріг product(confidence, score),
+# бо після softmax на 7 класах argmax часто ~0.14–0.18 (агрегатор уже відсіяв «ніякого сигналу»).
+NEUTRAL_EXIT_CONFIDENCE_FACTOR = 0.12
+
+# Якщо softmax-лідер ≠ поточний стан аватара: дозволити перехід до лідера при слабшому product,
+# інакше «застряє» self-loop (happy→happy з p≈0.12), хоча діаграма показує thinking/sad тощо.
+SOFTMAX_TOP_TRANSITION_FACTOR = 0.15
+
 # Розмір вікна контексту (кількість попередніх результатів, що впливають на поточний)
 CONTEXT_WINDOW_SIZE = 5
 
@@ -220,6 +228,18 @@ class EmotionLexicon:
         "добре":       {"happy": 2.5},
         "добрий":      {"happy": 2.0},
         "добра":       {"happy": 2.0},
+        "хороший":     {"happy": 2.5},
+        "хороша":      {"happy": 2.5},
+        "хороше":      {"happy": 2.5},
+        "хороші":      {"happy": 2.5},
+        "хорошими":    {"happy": 2.5},
+        "хорошою":     {"happy": 3.0},
+        "хорошому":    {"happy": 2.5},
+        "хороших":     {"happy": 2.5},
+        "оцінка":      {"happy": 2.5},
+        "оцінки":      {"happy": 2.0},
+        "оцінкою":     {"happy": 2.5},
+        "оцінку":      {"happy": 2.0},
         "гарно":       {"happy": 2.5},
         "гарний":      {"happy": 2.0},
         "гарна":       {"happy": 2.0},
@@ -263,6 +283,29 @@ class EmotionLexicon:
         "молодець":    {"happy": 3.0},
         "молодчина":   {"happy": 3.5},
         "браво":       {"happy": 3.5},
+        "кайф":        {"happy": 3.5},
+        "кайфово":     {"happy": 3.5},
+        "афігєно":     {"happy": 3.0},
+        "афігенно":    {"happy": 3.0},
+        "обалденно":   {"happy": 3.0},
+        "незабутньо":  {"happy": 3.5},
+        "пишаюся":     {"happy": 3.5},
+        "пишається":   {"happy": 3.2},
+        "гордий":      {"happy": 2.8},
+        "горда":       {"happy": 2.8},
+        "розчулений":  {"happy": 3.0},
+        "розчулена":   {"happy": 3.0},
+        "надзвичайно": {"happy": 3.5, "surprise": 2.0},
+        "збулося":     {"happy": 3.5},
+        "ідеально":    {"happy": 3.5},
+        "бездоганно":  {"happy": 3.5},
+        "нагорода":    {"happy": 3.2},
+        "запрошення":  {"happy": 2.8},
+        "зарахували":  {"happy": 3.2},
+        "зараховано":  {"happy": 3.5},
+        "склав":       {"happy": 2.2},  # у позитивних конструкціях; конфлікти змінюють патерн/ML
+        "здала":       {"happy": 2.2},
+        "здали":       {"happy": 2.2},
         # emoji happy
         "😊": {"happy": 3.5},
         "😃": {"happy": 4.0},
@@ -320,6 +363,12 @@ class EmotionLexicon:
         "проблема":    {"sad": 2.0, "thinking": 1.0},
         "помилка":     {"sad": 1.5, "thinking": 1.5},
         "невдача":     {"sad": 3.5},
+        "незарах":    {"sad": 3.5},
+        "незарахування": {"sad": 3.2},
+        "залік":       {"sad": 2.0, "thinking": 2.5},
+        "заліки":      {"sad": 1.8, "thinking": 2.0},
+        "заліку":      {"sad": 2.0},
+        "перездача":   {"sad": 3.0, "thinking": 1.2},
         "провалився":  {"sad": 3.5},
         "провалилася": {"sad": 3.5},
         "провалив":    {"sad": 3.5},
@@ -337,6 +386,33 @@ class EmotionLexicon:
         "самотній":    {"sad": 3.0},
         "самотня":     {"sad": 3.0},
         "самотність":  {"sad": 3.5},
+        "розчарований": {"sad": 3.5, "thinking": 1.0},
+        "розчарована": {"sad": 3.5, "thinking": 1.0},
+        "засмучений":  {"sad": 3.5},
+        "засмучена":   {"sad": 3.5},
+        "прикро":      {"sad": 3.5},
+        "образився":   {"sad": 3.0},
+        "образилася":   {"sad": 3.0},
+        "сенсу":       {"sad": 3.5, "thinking": 3.5},
+        "безглуздо":   {"sad": 3.0, "thinking": 2.5},
+        "депресія":    {"sad": 4.5},
+        "депресивно":   {"sad": 4.0},
+        "депресивний": {"sad": 4.0},
+        "безнадія":    {"sad": 4.5},
+        "безнадійно": {"sad": 4.5},
+        "апатія":      {"sad": 4.0, "thinking": 1.5},
+        "апатично":    {"sad": 3.5},
+        "вигорів":     {"sad": 3.5},
+        "вигоріла":    {"sad": 3.5},
+        "порожньо":    {"sad": 3.5},
+        "розгублений": {"sad": 3.2, "thinking": 2.5},
+        "розгублена":  {"sad": 3.2, "thinking": 2.5},
+        "засмутило":   {"sad": 3.5},
+        "розбитий":    {"sad": 4.0},
+        "розбита":    {"sad": 4.0},
+        "втратив":      {"sad": 3.5},
+        "втратила":     {"sad": 3.5},
+        "втрачаю":      {"sad": 4.0},
         # emoji sad
         "😢": {"sad": 4.0},
         "😭": {"sad": 4.5},
@@ -378,9 +454,13 @@ class EmotionLexicon:
         "захоплення":   {"surprise": 2.5, "happy": 2.0},
         "вражений":     {"surprise": 3.0, "happy": 1.5},
         "вражена":      {"surprise": 3.0, "happy": 1.5},
-        "серйозно":     {"surprise": 2.0},
+        "серйозно":     {"surprise": 2.5, "thinking": 1.5},
         "справді":      {"surprise": 2.0},
-        "реально":      {"surprise": 2.0},
+        "реально":      {"surprise": 2.5},
+        "дивно":        {"surprise": 3.5, "thinking": 2.0},
+        "дивина":       {"surprise": 3.5},
+        "незвично":     {"surprise": 3.0},
+        "незвичайний":  {"surprise": 3.0},
         # emoji surprise
         "😲": {"surprise": 4.5},
         "😱": {"surprise": 4.5},
@@ -416,6 +496,18 @@ class EmotionLexicon:
         "складно":      {"thinking": 2.0, "sad": 1.0},
         "складний":     {"thinking": 1.5},
         "складна":      {"thinking": 1.5},
+        "передбачаю":   {"thinking": 2.0},
+        "прогнозую":    {"thinking": 2.0},
+        "поясни":       {"thinking": 3.2},
+        "пояснити":     {"thinking": 3.0},
+        "розкажи":      {"thinking": 2.8},
+        "розповісти":   {"thinking": 2.5},
+        "логіка":       {"thinking": 2.5},
+        "перевіряю":    {"thinking": 2.5},
+        "звучить":       {"thinking": 2.0},
+        "сумніваюсь":   {"thinking": 3.5},
+        "сумніваюся":    {"thinking": 3.5},
+        "сумніви":       {"thinking": 2.8},
         "незрозуміло":  {"thinking": 2.5},
         "незрозумілий": {"thinking": 2.0},
         "незрозуміла":  {"thinking": 2.0},
@@ -436,14 +528,19 @@ class EmotionLexicon:
         "злість":      {"angry": 3.5},
         "злюсь":       {"angry": 4.0},
         "злюся":       {"angry": 4.0},
-        "бісить!":     {"angry": 3.5},
+        "бісить":      {"angry": 4.0},
+        "бісить!":     {"angry": 4.0},
+        "задрало":     {"angry": 3.5},
         "дратує":      {"angry": 3.0},
-        "дістало":     {"angry": 3.5},
+        "дістало":     {"angry": 4.2},
         "ненавиджу":   {"angry": 4.5},
         "ненависний":  {"angry": 3.5},
         "ненависна":   {"angry": 3.5},
         "розлючений":  {"angry": 4.0},
         "розлючена":   {"angry": 4.0},
+        "розізлився":  {"angry": 4.0},
+        "розізлилась": {"angry": 4.0},
+        "розізлилася": {"angry": 4.0},
         "лютий":       {"angry": 3.5},
         "люта":        {"angry": 3.5},
         "ярістний":    {"angry": 3.5},
@@ -477,9 +574,45 @@ class EmotionLexicon:
         "фу":          {"disgust": 3.5},
         "фі":          {"disgust": 3.0},
         "відраза":     {"disgust": 4.0},
+        "мерзота":     {"disgust": 3.8},
+        "смердить":    {"disgust": 3.5},
         "🤢": {"disgust": 4.5},
         "🤮": {"disgust": 4.5},
         "🤧": {"disgust": 2.0},
+
+        # ── NEUTRAL / фактичний тон ──────────────────────────────────────────
+        # Вітання та прощання — переважно нейтральні (службові), щоб один «привіт» не ставив радість вище теми розмови
+        "привіт":     {"neutral": 3.5, "happy": 0.5},
+        "привітик":    {"neutral": 3.2, "happy": 0.4},
+        "привітулі":    {"neutral": 3.2, "happy": 0.4},
+        "здрастуй":    {"neutral": 3.2},
+        "здрастуйте":  {"neutral": 3.5},
+        "добридень":    {"neutral": 3.2},
+        "добраніч":    {"neutral": 3.0},
+        "бувай":       {"neutral": 2.8},
+        "побачимось":  {"neutral": 2.8},
+        "вітаю":       {"neutral": 3.0, "happy": 1.0},
+        "вітання":     {"neutral": 3.0, "happy": 0.8},
+        "вітай":       {"neutral": 2.8},
+        "нейтрально": {"neutral": 3.0},
+        "звичайно":    {"neutral": 2.8},
+        "нормально":   {"neutral": 2.5, "happy": 1.0},
+        "так-так":    {"neutral": 2.0},
+        "ок":         {"neutral": 2.5, "happy": 1.0},
+        "окей":       {"neutral": 2.5, "happy": 1.0},
+        "зрозуміло":  {"neutral": 3.0},
+        "байдуже":    {"neutral": 3.0},
+        "пофіг":      {"neutral": 3.0},
+        "може":       {"neutral": 2.5, "thinking": 1.5},
+        "подивимось": {"neutral": 2.5, "thinking": 2.0},
+        "подивімось": {"neutral": 2.5, "thinking": 2.0},
+        "факт":       {"neutral": 2.5, "thinking": 1.5},
+        "інформація": {"neutral": 2.5},
+        "розклад":    {"neutral": 2.8, "thinking": 1.8},
+        "документ":   {"neutral": 2.5},
+        "посилання":  {"neutral": 2.5},
+        "поки":       {"neutral": 1.8},
+        "потім":      {"neutral": 2.0},
     }
 
     def __init__(self) -> None:
@@ -538,7 +671,7 @@ class PatternAnalyzer:
     3. Великі літери CAPS → emphasis / anger
     4. Повтор букв (аааа, оооо) → surprise / emphasis
     5. Крапки-многокрапки (...) → sad / uncertainty
-    6. Смайлики з символів :) :D :( → happy / sad
+    6. Текстові смайли :) :D :( ^_^ T_T, «(» лише в кінці — сум; додаткові маркери радості/суму
     7. Слова-повтори → emphasis
     """
 
@@ -552,6 +685,8 @@ class PatternAnalyzer:
         (r"\?{1,}", {"thinking": 1.5}),
         # Питання + оклик
         (r"[?!]{2,}", {"surprise": 2.0, "thinking": 0.5}),
+        # Питальні слова на початку рядка
+        (r"^(чому|навіщо|як|де|коли|хто|що|скільки)\b", {"thinking": 1.5}),
         # Caps lock (≥4 символів) → злість / акцент
         (r"\b[А-ЯЁЇІЄA-Z]{4,}\b", {"angry": 2.5, "surprise": 0.8}),
         # Повтор голосних (аааа, оооо)
@@ -559,15 +694,28 @@ class PatternAnalyzer:
         # Три і більше крапки
         (r"\.{3,}", {"sad": 1.5, "thinking": 1.0}),
         # Текстові смайлики — радість
-        (r"[:;]-?[\)D\]]", {"happy": 2.5}),
-        # Текстові смайлики — сум
-        (r"[:;]-?[\(\[<]", {"sad": 2.5}),
+        (r"[:;8XB]-?[\)D\]3]", {"happy": 2.5}),
+        # ^_^, >^_^<, очі ^
+        (r"(?:[\^⌒][_.\s]?[\^⌒])+", {"happy": 2.2}),
+        # Текстові смайлики — сум (двокрапка або крапка з комою)
+        (r"[:;≈≤]-?[\(\[<]", {"sad": 2.5}),
+        # «=», «о» або цифра як очі + рот
+        (r"[0oОоO_=][:_.''\-][(\[\{cс]", {"sad": 2.5}),
+        (r"T[._'-]?T|(?<!\w)u_u(?!\w)", {"sad": 2.8}),
+        # Одна «(» / повна ширина «（» у кінці — часто смайл суму без ':'
+        (r"(?:\(|\uff08)\s*$", {"sad": 3.5}),
+        # Рот «сс» або латинське C після ':' (:( :с)
+        (r"[:;8][\-~^]?[ссСCc]\b", {"sad": 2.8}),
         # XD, xd
         (r"\bx[dD]\b", {"happy": 2.5}),
         # лол, ахаха, хехе
         (r"\b(лол|лол+|ахах+|хехе|хіхі|haha|hehe)\b", {"happy": 2.5}),
-        # Питальні слова на початку
-        (r"^(чому|навіщо|як|де|коли|хто|що|скільки)\b", {"thinking": 1.5}),
+        # «як жити далі…» тригерить сум у навчанні ML; коли поруч є явно позитив → радість/здивування
+        (r"жити\s+далі[^\.\?!]{0,80}хорош\w*", {"happy": 2.5, "surprise": 2.0}),
+        # Студентські провали (ML часто дає хибну радість)
+        (r"\bне\s+отрима\w+\s+залік\w*", {"sad": 3.5}),
+        (r"\bне\s+(?:склав|здав)\w*\s+(?:залік\w*|іспит\w*|екзамен\w*|сесі\w*)", {"sad": 3.5}),
+        (r"\bпровалив\w*\s+(?:залік|іспит|сесі)\w*", {"sad": 3.2}),
         # Вигуки
         (r"^(ого|ой|ах|ааа|оо+)\b", {"surprise": 2.5}),
     ]
@@ -703,9 +851,8 @@ class NegationProcessor:
     ───────────────────────────────
     1. Сканування токенів на маркери заперечення
     2. Відкриття «вікна заперечення» (наступні 4 токени)
-    3. У межах вікна інвертуємо домінуючу емоцію:
-       happy ↔ sad,  surprise → thinking (здивування ≈ скептицизм),
-       thinking → neutral (сумнів заперечення)
+    3. У межах вікна інвертуємо домінуючу емоцію лише якщо вона ∈ {happy, surprise};
+       сум/злість через граматичне «не» не інвертуємо (контрофакт із «не отримав залік»).
     4. Закриття вікна при появі нового речення (крапка, !)
     """
 
@@ -734,7 +881,9 @@ class NegationProcessor:
         scores: Dict[Emotion, float],
     ) -> Dict[Emotion, float]:
         """
-        Якщо є заперечення — інвертуємо домінуючу емоцію.
+        Якщо є заперечення — частково переносимо масу лише коли домінанта
+        уже «позитивної» полярності (happy / surprise). Інакше граматичне «не»
+        («не отримав», «немає сенсу») хибно перетворює сум на радість.
         """
         has_negation = any(tok in self.NEGATION_TOKENS for tok in tokens)
         if not has_negation:
@@ -746,6 +895,9 @@ class NegationProcessor:
             return scores
 
         dominant = max(non_neutral, key=lambda e: non_neutral[e])
+        if dominant not in ("happy", "surprise"):
+            return scores
+
         inverted_emotion = self.INVERSION_TABLE.get(dominant, "neutral")
 
         # Переносимо бали домінуючої емоції на інвертовану
@@ -849,9 +1001,12 @@ class ScoreAggregator:
         Приймає фінальне рішення щодо емоції.
 
         Алгоритм порогового вибору:
-        1. Знаходимо клас з максимальною ймовірністю
-        2. Якщо загальна сума сирих балів < порогу → neutral
-        3. Якщо впевненість < CONFIDENCE_THRESHOLD → neutral
+        1. Знаходимо клас з максимальною ймовірністю (softmax)
+        2. Якщо загальна сума сирих балів (без neutral) < NEUTRAL_FLOOR_SCORE → neutral
+        3. Якщо топ < CONFIDENCE_THRESHOLD:
+             — якщо топ уже «neutral» або не перевищує neutral у розподілі → стан neutral;
+             — інакше (типовий плоский 7-класовий softmax) лишаємо softmax-argmax із його p,
+               щоб демо/чат узгоджувалися зі стовпцями ймовірностей (див. картка «розподіл»).
         """
         total_raw = sum(raw_scores.get(e, 0.0) for e in EMOTION_LIST if e != "neutral")
 
@@ -860,9 +1015,12 @@ class ScoreAggregator:
 
         best_emotion = max(normalized, key=lambda e: normalized[e])
         confidence = normalized[best_emotion]
+        neut = normalized.get("neutral", 0.0)
 
         if confidence < CONFIDENCE_THRESHOLD:
-            return "neutral", normalized.get("neutral", 0.5)
+            if best_emotion == "neutral" or confidence <= neut + 1e-12:
+                return "neutral", neut
+            return best_emotion, confidence
 
         return best_emotion, confidence
 
@@ -1041,15 +1199,42 @@ class TransitionMatrix:
         from_emotion: Emotion,
         to_emotion: Emotion,
         confidence: float,
+        *,
+        softmax_argmax: Optional[Emotion] = None,
     ) -> bool:
         """
         Перевіряє, чи допустимий перехід from_emotion → to_emotion при
         даному рівні впевненості.
 
-        Правило: confidence * transition_score ≥ CONFIDENCE_THRESHOLD
+        Правило: confidence × transition_score ≥ порогу (для виходу з neutral — нижчий поріг,
+        щоб не скидати плоский але консистентний softmax).
+
+        Перехід у той самий стан дозволено лише за наявності ймовірнісної маси
+        (≥ NEUTRAL_EXIT_CONFIDENCE_FACTOR), інакше «залишитись» у happy з p=0 хибно проходить поріг.
+
+        Якщо to_emotion збігається з softmax_argmax — додатково дозволяємо слабший product
+        (див. SOFTMAX_TOP_TRANSITION_FACTOR), щоб фінальний клас відповідав стовпцям ймовірностей.
         """
+        if from_emotion == to_emotion:
+            return confidence >= NEUTRAL_EXIT_CONFIDENCE_FACTOR
         transition_score = self.MATRIX.get(from_emotion, {}).get(to_emotion, 1.0)
-        return confidence * transition_score >= CONFIDENCE_THRESHOLD
+        product = confidence * transition_score
+        need = CONFIDENCE_THRESHOLD
+        if (
+            from_emotion == "neutral"
+            and to_emotion != "neutral"
+            and transition_score >= 0.99
+        ):
+            need = NEUTRAL_EXIT_CONFIDENCE_FACTOR
+        if product >= need:
+            return True
+        if (
+            softmax_argmax is not None
+            and to_emotion == softmax_argmax
+            and from_emotion != to_emotion
+        ):
+            return product >= SOFTMAX_TOP_TRANSITION_FACTOR
+        return False
 
     def best_allowed(
         self,
@@ -1058,10 +1243,18 @@ class TransitionMatrix:
     ) -> Tuple[Emotion, float]:
         """
         Повертає найкращу допустиму емоцію з урахуванням матриці переходів.
+
+        Не залишає застарілий стан (self-loop), якщо глобальний softmax-лідер інший —
+        інакше UI показує «радість», а діаграму — «роздуми».
         """
+        softmax_top = max(scores, key=lambda e: scores[e])
         candidates = sorted(scores.items(), key=lambda x: -x[1])
         for emotion, confidence in candidates:
-            if self.allowed(from_emotion, emotion, confidence):
+            if emotion == from_emotion and softmax_top != from_emotion:
+                continue
+            if self.allowed(
+                from_emotion, emotion, confidence, softmax_argmax=softmax_top
+            ):
                 return emotion, confidence
         return "neutral", scores.get("neutral", 0.5)
 
@@ -1258,7 +1451,8 @@ class AvatarController:
     # Для POST /api/emotion/analyze? демо-сторінки: зсув порогів униз → частіший вибір
     # «strong» і «medium» кліпа при середній впевненості (чат і прод не змінюються).
     DEMO_HIGH_DELTA = 0.10
-    DEMO_MED_DELTA = 0.07
+    # Для демо med з ~0.30: типовий softmax-p(класу)≈0.31 уже дає тематичний кліп, не «розмовний» blink.
+    DEMO_MED_DELTA = 0.15
 
     # Базовий кліп, якщо клас невідомий або немає запису в мапі
     DEFAULT_CLIP = "muse.mp4"
@@ -1266,7 +1460,8 @@ class AvatarController:
     # emotion → (high_conf_file, med_conf_file, fallback_file)
     ANIMATION_MAP: Dict[Emotion, Tuple[str, str, str]] = {
         "neutral": ("muse.mp4", "speak_blink.mp4", "speak.mp4"),
-        "happy": ("excited.mp4", "happy.mp4", "speak_blink.mp4"),
+        # fallback = м’який, але все ще клас «радість» (не нейтральний blink)
+        "happy": ("excited.mp4", "happy.mp4", "happy.mp4"),
         "sad": ("sad.mp4", "speak.mp4", "muse.mp4"),
         "surprise": ("surprize1.mp4", "fear.mp4", "confused.mp4"),
         "thinking": ("squinted1.mp4", "confused.mp4", "speak_blink.mp4"),

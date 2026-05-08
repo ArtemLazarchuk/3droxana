@@ -282,9 +282,13 @@ window.addEventListener("DOMContentLoaded", async () => {
      * Сторінка / картка не «перезавантажуються»; немає глухого кадру одного плеєра перед play.
      * @param {Object} [opts]
      * @param {boolean} [opts.fade=true] — короткий crossfade між шарами; false — без transition для ротації.
+     * @param {boolean} [opts.playThroughOnce=false] — один повний прохід без loop (для ротації по «ended»).
+     * @param {function} [opts.onEnded] — після playThroughOnce, коли кліп відіграв до кінця.
      */
     function applyAvatarTransition(emotion, filename, opts = {}) {
         const fade = opts.fade !== false;
+        const playThroughOnce = opts.playThroughOnce === true;
+        const onEnded = opts.onEnded;
         if (
             !avatarVideoStack ||
             !avatarLayerA ||
@@ -298,8 +302,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         const active = _activeAvatarLayer;
         const idle = active === avatarLayerA ? avatarLayerB : avatarLayerA;
 
-        if (_lastAvatarFilename === filename) {
+        if (_lastAvatarFilename === filename && !playThroughOnce) {
             try {
+                active.loop = true;
                 active.currentTime = 0;
                 active.play().catch(() => {});
             } catch (_) {}
@@ -315,7 +320,16 @@ window.addEventListener("DOMContentLoaded", async () => {
             active.classList.remove("is-active");
             active.pause();
             idle.classList.add("is-active");
+            idle.loop = !playThroughOnce;
             idle.play().catch(() => {});
+            if (playThroughOnce && typeof onEnded === "function") {
+                const once = () => {
+                    idle.removeEventListener("ended", once);
+                    if (gen !== _avatarSwapGen) return;
+                    onEnded();
+                };
+                idle.addEventListener("ended", once);
+            }
             _activeAvatarLayer = idle;
             _lastAvatarFilename = filename;
         };
@@ -407,7 +421,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     /** Пули з 3 кліпів (high/med/fallback) — як у AvatarController в emotion_engine.py; цикл під час очікування відповіді */
     const AVATAR_ROTATION_POOLS = {
         neutral:  ["muse.mp4", "speak_blink.mp4", "speak.mp4"],
-        happy:    ["excited.mp4", "happy.mp4", "speak_blink.mp4"],
+        happy:    ["excited.mp4", "happy.mp4", "happy.mp4"],
         sad:      ["sad.mp4", "speak.mp4", "muse.mp4"],
         surprise: ["surprize1.mp4", "fear.mp4", "confused.mp4"],
         thinking: ["squinted1.mp4", "confused.mp4", "speak_blink.mp4"],
@@ -415,11 +429,20 @@ window.addEventListener("DOMContentLoaded", async () => {
         disgust:  ["disgust.mp4", "squinted1.mp4", "muse.mp4"],
     };
 
-    /** Інтервал перемикання кліпів, поки асистент думає / стрімить відповідь */
-    const AVATAR_ROTATION_INTERVAL_MS = 2600;
+    /** Мін. пауза перед «задумливою» ротацією — якщо одразу прийде user_emotion, не показуємо два стани поспіль. */
+    const THINKING_AVATAR_DEBOUNCE_MS = 480;
 
-    /** Таймер циклічної зміни відео (null — не активний). */
-    let avatarRotationTimerId = null;
+    /** Покоління ротації: скидається в clearAvatarRotation, щоб старі onEnded не спрацьовували. */
+    let avatarRotationGeneration = 0;
+
+    let thinkingAvatarDebounceId = null;
+
+    function cancelThinkingAvatarDebounce() {
+        if (thinkingAvatarDebounceId != null) {
+            clearTimeout(thinkingAvatarDebounceId);
+            thinkingAvatarDebounceId = null;
+        }
+    }
 
     /**
      * Остання виразна емоція користувача за поточне відправлене повідомлення (поки LLM відповідає).
@@ -428,42 +451,80 @@ window.addEventListener("DOMContentLoaded", async () => {
     let stickyUserAvatarThisTurn = null;
 
     function clearAvatarRotation() {
-        if (avatarRotationTimerId != null) {
-            clearInterval(avatarRotationTimerId);
-            avatarRotationTimerId = null;
-        }
+        cancelThinkingAvatarDebounce();
+        avatarRotationGeneration++;
     }
 
-    /**
-     * Під час генерації відповіді — по черзі 2–3 різних кліпи для переданої емоції.
-     * hintFilename: якщо є (з бекенду), першим показуємо його або стартуємо з нього в циклі.
-     */
-    function startAvatarRotation(emotionKey, hintFilename = null) {
-        if (!avatarLayerA || !avatarLayerB) return;
-        clearAvatarRotation();
+    /** Скільки різних кліпів у циклі ротації: частіше 1–2, інколи 3. Для thinking — ще більше «одна форма». */
+    function pickRotationPlaylistLength(emotionKey, poolLen) {
+        const r = Math.random();
+        if (emotionKey === "thinking") {
+            if (r < 0.58) return 1;
+            if (r < 0.92) return Math.min(2, poolLen);
+            return Math.min(3, poolLen);
+        }
+        if (r < 0.42) return 1;
+        if (r < 0.78) return Math.min(2, poolLen);
+        return Math.min(3, poolLen);
+    }
+
+    function buildRotationPlaylist(emotionKey, hintFilename) {
         const key =
             AVATAR_ROTATION_POOLS[emotionKey] !== undefined
                 ? emotionKey
                 : "neutral";
-        const pool = AVATAR_ROTATION_POOLS[key];
-        if (!pool || pool.length === 0) return;
-
-        let idx = 0;
+        const full = AVATAR_ROTATION_POOLS[key];
+        if (!full || full.length === 0) return { key, playlist: [] };
+        const n = pickRotationPlaylistLength(key, full.length);
+        let start = 0;
         if (
             hintFilename &&
             typeof hintFilename === "string" &&
-            pool.includes(hintFilename)
+            full.includes(hintFilename)
         ) {
-            idx = pool.indexOf(hintFilename);
+            start = full.indexOf(hintFilename);
         }
+        const playlist = [];
+        for (let i = 0; i < n; i++) {
+            playlist.push(full[(start + i) % full.length]);
+        }
+        return { key, playlist };
+    }
 
+    /**
+     * Під час генерації — цикл з 1–3 кліпів; кожен кліп відтворюється повністю (ended), не обрізається таймером.
+     * hintFilename: якщо є (з бекенду), входить у плейлист із відповідного місця в пулі.
+     */
+    function startAvatarRotation(emotionKey, hintFilename = null) {
+        if (!avatarLayerA || !avatarLayerB) return;
+        clearAvatarRotation();
+        const token = avatarRotationGeneration;
+        const { key, playlist } = buildRotationPlaylist(emotionKey, hintFilename);
+        if (!playlist.length) return;
+
+        let i = 0;
         function step() {
-            const fn = pool[idx % pool.length];
-            idx = (idx + 1) % pool.length;
-            applyAvatarTransition(key, fn, { fade: false });
+            if (token !== avatarRotationGeneration) return;
+            const fn = playlist[i % playlist.length];
+            applyAvatarTransition(key, fn, {
+                fade: false,
+                playThroughOnce: true,
+                onEnded: () => {
+                    if (token !== avatarRotationGeneration) return;
+                    i = (i + 1) % playlist.length;
+                    step();
+                },
+            });
         }
         step();
-        avatarRotationTimerId = setInterval(step, AVATAR_ROTATION_INTERVAL_MS);
+    }
+
+    function scheduleThinkingAvatarRotation() {
+        cancelThinkingAvatarDebounce();
+        thinkingAvatarDebounceId = setTimeout(() => {
+            thinkingAvatarDebounceId = null;
+            startAvatarRotation("thinking");
+        }, THINKING_AVATAR_DEBOUNCE_MS);
     }
 
     /**
@@ -540,6 +601,7 @@ window.addEventListener("DOMContentLoaded", async () => {
      */
     function handleUserEmotionEvent(data) {
         if (!data || !data.emotion) return;
+        cancelThinkingAvatarDebounce();
         const c = Number(data.confidence) || 0;
         if (data.emotion === "neutral" || c < USER_EMOTION_AVATAR_THRESHOLD) return;
         const filename =
@@ -1318,7 +1380,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                             ? `${tm.emoji} ${tm.label}`
                             : "думає…";
                     }
-                    startAvatarRotation("thinking");
+                    scheduleThinkingAvatarRotation();
                     return;
                 }
                 // user_emotion — реакція аватара ще до відповіді LLM (від EmotionEngine)
