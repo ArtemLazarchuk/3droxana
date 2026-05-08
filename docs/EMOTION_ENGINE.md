@@ -189,14 +189,16 @@ python scripts/train_emotion_model.py --test-size 0.25 --seed 42
 ### 3.5. Агрегатор балів (`ScoreAggregator`)
 
 **З ML-моделлю:**
-$$
-\text{combined}_e = 0.35 \cdot \text{lex}_e + 0.20 \cdot \text{pat}_e + 0.45 \cdot 5 \cdot \text{ml}_e
-$$
+
+```text
+combined_e = 0.35·lex_e + 0.20·pat_e + 0.45·(5·ml_e)
+```
 
 **Без ML-моделі:**
-$$
-\text{combined}_e = 0.70 \cdot \text{lex}_e + 0.30 \cdot \text{pat}_e
-$$
+
+```text
+combined_e = 0.70·lex_e + 0.30·pat_e
+```
 
 Множник `5` для ML переводить ймовірності `[0..1]` в шкалу сирих балів лексикона (вони у діапазоні `0..~5`).
 
@@ -227,11 +229,13 @@ $$
 
 ### 3.8. Softmax-нормалізація
 
-$$
-P(e_i) = \frac{e^{s_i - s_{\max}}}{\sum_j e^{s_j - s_{\max}}}
-$$
+Ймовірність класу *e<sub>i</sub>* після нормалізації (у коді — з відніманням максимуму для стабільності):
 
-Віднімання `s_max` забезпечує числову стабільність.
+```text
+P(e_i) = exp(s_i − s_max) / Σ_j exp(s_j − s_max)
+```
+
+Віднімання **s<sub>max</sub>** забезпечує числову стабільність (той самий розподіл, що й «класичний» softmax).
 
 ### 3.9. Поріг та вибір рішення
 
@@ -243,11 +247,11 @@ $$
 
 Зберігає **5** останніх результатів. Кожен запис має експоненційне затухання за часом (half-life ≈ 60 сек):
 
-$$
-w_t = e^{-(t_{\text{now}} - t_{\text{entry}}) / 60}
-$$
+```text
+w_t = exp(−(t_now − t_entry) / 60)
+```
 
-Зважена частота кожної емоції у вікні дає `context_emotion`. Якщо `context_emotion ≠ current_emotion` і `context_confidence > 0.5` при `current_confidence < 0.5` — повертаємо **контекстну** емоцію (захист від миттєвих стрибків).
+`t_now` та `t_entry` — поточний момент і час запису вікна (секунди). Зважена частота кожної емоції у вікні дає `context_emotion`. Якщо `context_emotion ≠ current_emotion` і `context_confidence > 0.5` при `current_confidence < 0.5` — повертаємо **контекстну** емоцію (захист від миттєвих стрибків).
 
 Параметр `CONTEXT_SMOOTHING_ALPHA = 0.25` керує силою змішування:
 - `0.0` — повна незалежність,
