@@ -344,6 +344,62 @@ window.addEventListener("DOMContentLoaded", async () => {
         "🤢": "disgust.mp4",
     };
 
+    /** Пули з 3 кліпів (high/med/fallback) — як у AvatarController в emotion_engine.py; цикл під час очікування відповіді */
+    const AVATAR_ROTATION_POOLS = {
+        neutral:  ["muse.mp4", "speak_blink.mp4", "speak.mp4"],
+        happy:    ["excited.mp4", "happy.mp4", "speak_blink.mp4"],
+        sad:      ["sad.mp4", "speak.mp4", "muse.mp4"],
+        surprise: ["surprize1.mp4", "fear.mp4", "confused.mp4"],
+        thinking: ["squinted1.mp4", "confused.mp4", "speak_blink.mp4"],
+        angry:    ["angry.mp4", "speak.mp4", "fear.mp4"],
+        disgust:  ["disgust.mp4", "squinted1.mp4", "muse.mp4"],
+    };
+
+    /** Інтервал перемикання кліпів, поки асистент думає / стрімить відповідь */
+    const AVATAR_ROTATION_INTERVAL_MS = 2600;
+
+    /** Таймер циклічної зміни відео (null — не активний). */
+    let avatarRotationTimerId = null;
+
+    function clearAvatarRotation() {
+        if (avatarRotationTimerId != null) {
+            clearInterval(avatarRotationTimerId);
+            avatarRotationTimerId = null;
+        }
+    }
+
+    /**
+     * Під час генерації відповіді — по черзі 2–3 різних кліпи для переданої емоції.
+     * hintFilename: якщо є (з бекенду), першим показуємо його або стартуємо з нього в циклі.
+     */
+    function startAvatarRotation(emotionKey, hintFilename = null) {
+        if (!avatarVideo) return;
+        clearAvatarRotation();
+        const key =
+            AVATAR_ROTATION_POOLS[emotionKey] !== undefined
+                ? emotionKey
+                : "neutral";
+        const pool = AVATAR_ROTATION_POOLS[key];
+        if (!pool || pool.length === 0) return;
+
+        let idx = 0;
+        if (
+            hintFilename &&
+            typeof hintFilename === "string" &&
+            pool.includes(hintFilename)
+        ) {
+            idx = pool.indexOf(hintFilename);
+        }
+
+        function step() {
+            const fn = pool[idx % pool.length];
+            idx = (idx + 1) % pool.length;
+            applyAvatarTransition(key, fn);
+        }
+        step();
+        avatarRotationTimerId = setInterval(step, AVATAR_ROTATION_INTERVAL_MS);
+    }
+
     /**
      * Застосовує емоцію до аватара.
      * Якщо event містить user_emotion (від EmotionEngine) — аватар реагує на емоцію КОРИСТУВАЧА.
@@ -352,6 +408,7 @@ window.addEventListener("DOMContentLoaded", async () => {
      * Пріоритет: емоція користувача (якщо confidence ≥ USER_EMOTION_AVATAR_THRESHOLD) > емоція асистента
      */
     function applyAvatarEmotion(data) {
+        clearAvatarRotation();
         if (avatarBox) {
             avatarBox.classList.add("active-glow");
             setTimeout(() => avatarBox.classList.remove("active-glow"), 3000);
@@ -401,7 +458,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             data.avatar_filename ||
             AVATAR_VIDEO_MAP[data.emotion] ||
             "muse.mp4";
-        applyAvatarTransition(data.emotion, filename);
+        startAvatarRotation(data.emotion, filename);
         if (emotionLabel) {
             const meta = EMOTION_META[data.emotion];
             emotionLabel.textContent = meta ? `${meta.emoji} ${meta.label}` : data.emotion;
@@ -1077,6 +1134,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         syncAttachButton();
 
         chatInFlight = true;
+        clearAvatarRotation();
         streamAbortController = new AbortController();
         setSendButtonMode("stop");
         if (attachBtn) attachBtn.disabled = true;
@@ -1137,6 +1195,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
             if (!res.ok) {
                 cleanupThinking();
+                clearAvatarRotation();
                 let errMsg = `Помилка сервера (${res.status}). Спробуйте ще раз.`;
                 try {
                     const j = await res.json();
@@ -1159,7 +1218,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
             await consumeSseStream(res, (ev) => {
                 if (ev.type === "status" && ev.phase === "thinking") {
-                    if (emotionLabel) emotionLabel.textContent = "думає…";
+                    if (emotionLabel) {
+                        const tm = EMOTION_META.thinking;
+                        emotionLabel.textContent = tm
+                            ? `${tm.emoji} ${tm.label}`
+                            : "думає…";
+                    }
+                    startAvatarRotation("thinking");
                     return;
                 }
                 // user_emotion — реакція аватара ще до відповіді LLM (від EmotionEngine)
@@ -1201,9 +1266,11 @@ window.addEventListener("DOMContentLoaded", async () => {
                         link: ev.link || "",
                         title: ev.title || "",
                     });
+                    clearAvatarRotation();
                     applyAvatarEmotion(ev);
                 }
                 if (ev.type === "error") {
+                    clearAvatarRotation();
                     streamBubble?.remove();
                     cleanupThinking();
                     appendMessage(
@@ -1215,6 +1282,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         } catch (e) {
             streamBubble?.remove();
             cleanupThinking();
+            clearAvatarRotation();
             const aborted =
                 e &&
                 (e.name === "AbortError" ||
@@ -1232,13 +1300,20 @@ window.addEventListener("DOMContentLoaded", async () => {
             }
         } finally {
             chatInFlight = false;
+            clearAvatarRotation();
             streamAbortController = null;
             setSendButtonMode("send");
             if (attachBtn) attachBtn.disabled = false;
             if (voiceBtn) voiceBtn.disabled = false;
             if (userInput) userInput.disabled = false;
-            if (emotionLabel && emotionLabel.textContent === "думає…") {
-                emotionLabel.textContent = "Очікування";
+            if (emotionLabel) {
+                const tl = emotionLabel.textContent.trim();
+                const thinkingLbl = EMOTION_META.thinking
+                    ? `${EMOTION_META.thinking.emoji} ${EMOTION_META.thinking.label}`
+                    : "думає…";
+                if (tl === "думає…" || tl === thinkingLbl) {
+                    emotionLabel.textContent = "Очікування";
+                }
             }
             requestAnimationFrame(() => syncAvatarDefaultBottom());
         }
