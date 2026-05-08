@@ -82,12 +82,12 @@ GOOGLE_CLIENT_SECRET=""
 Однаково після активації venv:
 
 ```bash
-python -m uvicorn backend.main:app --reload --port 8000
+python -m uvicorn backend.main:app --reload --port 6060
 ```
 
 Після запуску API та фронтенд будуть доступні за адресою:
 
-- `http://localhost:8000` — основна сторінка застосунку.
+- `http://localhost:6060` — основна сторінка застосунку.
 
 ---
 
@@ -104,7 +104,7 @@ docker build -t 3droxana .
 Рекомендовано передавати ті ж самі змінні оточення, що й у `.env`:
 
 ```bash
-docker run -p 8000:8000 \
+docker run -p 6060:6060 \
   -e MONGODB_URI="mongodb://..." \
   -e DATABASE_NAME="3davatar" \
   -e TOGETHER_API_KEY="ваш-ключ" \
@@ -114,7 +114,7 @@ docker run -p 8000:8000 \
   3droxana
 ```
 
-Після цього застосунок буде доступний на `http://localhost:8000`.
+Після цього застосунок буде доступний на `http://localhost:6060`.
 
 ---
 

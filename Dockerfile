@@ -14,9 +14,9 @@ COPY frontend ./frontend
 COPY avatar ./avatar
 
 # Port
-EXPOSE 8000
+EXPOSE 6060
 
 # MONGODB_URI and DATABASE_NAME can be passed via -e in docker run
 ENV PYTHONUNBUFFERED=1
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "6060"]

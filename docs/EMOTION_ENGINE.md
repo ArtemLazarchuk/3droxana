@@ -300,7 +300,7 @@ w_t = exp(−(t_now − t_entry) / 60)
 ### Приклад запиту
 
 ```bash
-curl -X POST http://localhost:8000/api/emotion/analyze \
+curl -X POST http://localhost:6060/api/emotion/analyze \
   -H "Content-Type: application/json" \
   -d '{"text": "Я провалив екзамен, дуже сумно", "reset_context": true}'
 ```
@@ -402,11 +402,11 @@ pip install -r requirements.txt
 python -m scripts.train_emotion_model
 
 # 4) Запустіть сервер
-python -m uvicorn backend.main:app --reload --port 8000
+python -m uvicorn backend.main:app --reload --port 6060
 
 # 5) Відкрийте у браузері
-#    http://localhost:8000/emotion-demo   ← демо алгоритму
-#    http://localhost:8000/chat           ← чат із живим аватаром
+#    http://localhost:6060/emotion-demo   ← демо алгоритму
+#    http://localhost:6060/chat           ← чат із живим аватаром
 ```
 
 ---
