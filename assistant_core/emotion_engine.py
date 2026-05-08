@@ -1254,7 +1254,11 @@ class AvatarController:
     """
 
     HIGH_CONFIDENCE = 0.65
-    MED_CONFIDENCE  = 0.45
+    MED_CONFIDENCE = 0.45
+    # Для POST /api/emotion/analyze? демо-сторінки: зсув порогів униз → частіший вибір
+    # «strong» і «medium» кліпа при середній впевненості (чат і прод не змінюються).
+    DEMO_HIGH_DELTA = 0.10
+    DEMO_MED_DELTA = 0.07
 
     # Базовий кліп, якщо клас невідомий або немає запису в мапі
     DEFAULT_CLIP = "muse.mp4"
@@ -1270,12 +1274,19 @@ class AvatarController:
         "disgust": ("disgust.mp4", "squinted1.mp4", "muse.mp4"),
     }
 
-    def select_animation(self, result: EmotionResult) -> AvatarAnimation:
+    def select_animation(
+        self,
+        result: EmotionResult,
+        *,
+        demo_responsive: bool = False,
+    ) -> AvatarAnimation:
         """
         Вибирає анімаційний файл для аватара.
 
         Параметри:
             result – результат класифікації EmotionResult
+            demo_responsive – якщо True (демо UI), пороги high/med трохи нижчі,
+                щоб частіше показувати виразніші кліпи без зміни самої моделі.
 
         Повертає:
             AvatarAnimation з назвою файлу та метаданими
@@ -1286,10 +1297,17 @@ class AvatarController:
             (d, d, d),
         )
 
-        if result.confidence >= self.HIGH_CONFIDENCE:
+        high_t = self.HIGH_CONFIDENCE - (
+            self.DEMO_HIGH_DELTA if demo_responsive else 0.0
+        )
+        med_t = self.MED_CONFIDENCE - (
+            self.DEMO_MED_DELTA if demo_responsive else 0.0
+        )
+
+        if result.confidence >= high_t:
             filename = high
             priority = 3
-        elif result.confidence >= self.MED_CONFIDENCE:
+        elif result.confidence >= med_t:
             filename = med
             priority = 2
         else:

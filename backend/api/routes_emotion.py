@@ -27,7 +27,6 @@ from pydantic import BaseModel, Field
 from assistant_core.emotion_engine import (
     EMOTION_LIST,
     analyze_emotion,
-    get_avatar_animation,
     get_avatar_controller,
     get_engine_status,
     reset_session_context,
@@ -43,6 +42,13 @@ class EmotionAnalyzeRequest(BaseModel):
     reset_context: bool = Field(
         False,
         description="Скинути контекстну пам'ять перед аналізом (нова сесія)",
+    )
+    demo_responsive_avatar: bool = Field(
+        False,
+        description=(
+            "Лише для демо UI: трохи нижчі пороги strong/medium кліпа — "
+            "більше перемикань між .mp4 при середній впевненості"
+        ),
     )
 
 
@@ -127,9 +133,9 @@ async def analyze_text_emotion(req: EmotionAnalyzeRequest) -> EmotionAnalyzeResp
     Повний аналіз емоційного забарвлення тексту.
 
     Повертає:
-        emotion          – клас (neutral / happy / sad / surprise / thinking)
+        emotion          – один із класів EMOTION_LIST
         confidence       – впевненість моделі [0.0 … 1.0]
-        scores           – ймовірнісний розподіл по 5 класах (softmax, сума = 1)
+        scores           – ймовірнісний розподіл по класах (softmax)
         raw_scores       – сирі бали до softmax
         method           – ансамбль ("hybrid" / "lexicon" / "pattern" / "ml" / "fallback")
         context_smoothed – чи спрацювало часове згладжування
@@ -148,8 +154,10 @@ async def analyze_text_emotion(req: EmotionAnalyzeRequest) -> EmotionAnalyzeResp
         reset_session_context()
 
     result = analyze_emotion(req.text)
-    animation = get_avatar_animation(req.text)
-
+    animation = get_avatar_controller().select_animation(
+        result,
+        demo_responsive=req.demo_responsive_avatar,
+    )
     return EmotionAnalyzeResponse(
         emotion=result.emotion,
         confidence=result.confidence,

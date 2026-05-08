@@ -324,6 +324,24 @@ class TestAvatarController:
             used.add(low)
         assert used == set(ANIMATION_CLIP_FILES)
 
+    def test_demo_responsive_can_upgrade_tier(self):
+        """Нижчі пороги для демо дають інший файл при середній впевненості."""
+        base = {e: 0.0 for e in EMOTION_LIST}
+        base["happy"] = 1.0
+        r = EmotionResult(
+            emotion="happy",
+            confidence=0.56,
+            scores=dict(base),
+            raw_scores=dict(base),
+            method="hybrid",
+        )
+        norm = self.ctrl.select_animation(r, demo_responsive=False)
+        demo = self.ctrl.select_animation(r, demo_responsive=True)
+        assert norm.priority == 2
+        assert demo.priority == 3
+        assert demo.filename == "excited.mp4"
+        assert norm.filename == "happy.mp4"
+
     def test_high_confidence_picks_high_animation(self):
         result = EmotionResult(
             emotion="happy", confidence=0.85,

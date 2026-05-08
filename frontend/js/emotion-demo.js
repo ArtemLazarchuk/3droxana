@@ -57,9 +57,6 @@
         "neutral",
     ];
 
-    // Збереження поточного стану аватара для уникнення дубль-перемикань
-    let currentAvatarEmotion = "neutral";
-
     // ── DOM ──────────────────────────────────────────────────────────────────
     const $text         = document.getElementById("ed-text");
     const $analyzeBtn   = document.getElementById("ed-analyze-btn");
@@ -74,6 +71,23 @@
     const $avatarConf   = document.getElementById("ed-avatar-conf");
     const $avatarFile   = document.getElementById("ed-avatar-file");
     const $avatarPriority = document.getElementById("ed-avatar-priority");
+
+    /** Поточний .mp4: порівнюємо файл, не клас (у одного класу до 3 рівнів кліпа). */
+    function initialAvatarFilename() {
+        const sourceEl = $avatarVideo && $avatarVideo.querySelector("source");
+        if (!sourceEl || !sourceEl.src) return "";
+        try {
+            const path = decodeURIComponent(
+                new URL(sourceEl.src, window.location.href).pathname
+            );
+            const seg = path.split("/").pop() || "";
+            return seg;
+        } catch (_) {
+            return "";
+        }
+    }
+
+    let currentAvatarFilename = initialAvatarFilename();
 
     const $distCard     = document.getElementById("ed-distribution-card");
     const $bars         = document.getElementById("ed-bars");
@@ -162,6 +176,7 @@
                 body: JSON.stringify({
                     text,
                     reset_context: $resetCtx.checked,
+                    demo_responsive_avatar: true,
                 }),
             });
             if (!res.ok) {
@@ -185,7 +200,7 @@
         // 4.1 Аватар
         applyAvatar(data);
 
-        // 4.2 Розподіл по 5 класах
+        // 4.2 Розподіл по класах
         $distCard.hidden = false;
         $bars.innerHTML = "";
         ORDER.forEach((emotion) => {
@@ -291,7 +306,10 @@
 
     function applyAvatar(data) {
         const meta = EMOTION_META[data.emotion] || EMOTION_META.neutral;
-        const filename = (data.avatar && data.avatar.filename) || AVATAR_VIDEO[data.emotion] || AVATAR_VIDEO.neutral;
+        const filename =
+            (data.avatar && data.avatar.filename) ||
+            AVATAR_VIDEO[data.emotion] ||
+            AVATAR_VIDEO.neutral;
         const priority = (data.avatar && data.avatar.priority) ?? "—";
 
         $avatarEmoji.textContent = meta.emoji;
@@ -301,16 +319,23 @@
         $avatarFile.textContent = filename;
         $avatarPriority.textContent = String(priority);
 
-        if (data.emotion === currentAvatarEmotion) return;
+        if (!$avatarVideo) return;
         const sourceEl = $avatarVideo.querySelector("source");
         if (!sourceEl) return;
+
+        if (filename === currentAvatarFilename) {
+            $avatarVideo.currentTime = 0;
+            $avatarVideo.play().catch(() => {});
+            return;
+        }
+
+        currentAvatarFilename = filename;
         $avatarVideo.style.opacity = "0";
         setTimeout(() => {
             sourceEl.src = `/avatar/animations/${filename}`;
             $avatarVideo.load();
             $avatarVideo.play().catch(() => {});
             $avatarVideo.style.opacity = "1";
-            currentAvatarEmotion = data.emotion;
         }, 300);
     }
 

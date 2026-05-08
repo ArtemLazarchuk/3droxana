@@ -226,25 +226,54 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Порог впевненості для показу бейджу на повідомленні
     const EMOTION_BADGE_THRESHOLD = 0.40;
 
-    // Поточний стан аватара (для плавних переходів між анімаціями)
-    let _lastAvatarFilename = "";
+    /** Той самий поріг для аватару за емоцією користувача (інакше бейдж є, а кліп лишається старим). */
+    const USER_EMOTION_AVATAR_THRESHOLD = EMOTION_BADGE_THRESHOLD;
+
+    /** Останній .mp4; ініціалізуємо з DOM, щоб перший перехід не «зіпсувати» порівняння. */
+    function initialChatAvatarFilename() {
+        if (!avatarVideo) return "";
+        const fromUrl = (u) => {
+            if (!u) return "";
+            try {
+                const path = decodeURIComponent(new URL(u, window.location.href).pathname);
+                const seg = path.split("/").filter(Boolean).pop();
+                return seg || "";
+            } catch (_) {
+                return "";
+            }
+        };
+        let name = fromUrl(avatarVideo.currentSrc) || fromUrl(avatarVideo.src);
+        if (!name) {
+            const s = avatarVideo.querySelector("source");
+            name = fromUrl(s ? s.src : "");
+        }
+        return name || "muse.mp4";
+    }
+
+    let _lastAvatarFilename = initialChatAvatarFilename();
 
     /**
      * Плавна зміна анімації аватара з фейдом.
-     * Пропускаємо лише якщо файл той самий (зміна рівня впевненості → інший .mp4).
+     * Джерело вішаємо на сам <video> (src) — лише зміна дочірнього <source> у частини браузерів не перемикає декодер.
+     * Якщо файл той самий — перезапуск з початку.
      */
     function applyAvatarTransition(emotion, filename) {
-        if (!avatarVideo) return;
-        if (!filename) return;
-        if (_lastAvatarFilename === filename) return;
-        const sourceEl = avatarVideo.querySelector("source");
-        if (!sourceEl) return;
+        if (!avatarVideo || !filename) return;
+        if (_lastAvatarFilename === filename) {
+            try {
+                avatarVideo.currentTime = 0;
+                avatarVideo.play().catch(() => {});
+            } catch (_) {}
+            return;
+        }
 
-        // Плавне згасання → зміна джерела → поява (transition smoothing)
         avatarVideo.style.transition = "opacity 0.3s ease";
         avatarVideo.style.opacity = "0";
+        const path = `/avatar/animations/${filename}`;
         setTimeout(() => {
-            sourceEl.src = `/avatar/animations/${filename}`;
+            avatarVideo.pause();
+            avatarVideo.querySelectorAll("source").forEach((el) => el.remove());
+            avatarVideo.src = path;
             avatarVideo.load();
             avatarVideo.play().catch(() => {});
             avatarVideo.style.opacity = "1";
@@ -320,7 +349,7 @@ window.addEventListener("DOMContentLoaded", async () => {
      * Якщо event містить user_emotion (від EmotionEngine) — аватар реагує на емоцію КОРИСТУВАЧА.
      * Якщо є тільки emotion (від LLM) — аватар відображає стан АСИСТЕНТА.
      *
-     * Пріоритет: user_emotion (якщо confidence > 0.45) > assistant emotion
+     * Пріоритет: емоція користувача (якщо confidence ≥ USER_EMOTION_AVATAR_THRESHOLD) > емоція асистента
      */
     function applyAvatarEmotion(data) {
         if (avatarBox) {
@@ -335,7 +364,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         // Якщо є дані від EmotionEngine (user_emotion) — надаємо пріоритет
         const ue = data.user_emotion;
         let filename;
-        if (ue && ue.emotion && ue.emotion !== "neutral" && ue.confidence >= 0.45) {
+        if (ue && ue.emotion && ue.emotion !== "neutral" && ue.confidence >= USER_EMOTION_AVATAR_THRESHOLD) {
             displayEmotion = ue.emotion;
             const meta = EMOTION_META[ue.emotion];
             displayLabel = meta ? `${meta.emoji} ${meta.label}` : ue.emotion;
@@ -366,7 +395,8 @@ window.addEventListener("DOMContentLoaded", async () => {
      */
     function handleUserEmotionEvent(data) {
         if (!data || !data.emotion) return;
-        if (data.emotion === "neutral" || (data.confidence || 0) < 0.45) return;
+        if (data.emotion === "neutral" || (data.confidence || 0) < USER_EMOTION_AVATAR_THRESHOLD)
+            return;
         const filename =
             data.avatar_filename ||
             AVATAR_VIDEO_MAP[data.emotion] ||
