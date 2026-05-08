@@ -217,26 +217,28 @@ window.addEventListener("DOMContentLoaded", async () => {
         happy:    { emoji: "😊", label: "радісно",    color: "#f5a623" },
         sad:      { emoji: "😔", label: "сумно",      color: "#7b9dc8" },
         surprise: { emoji: "😲", label: "здивовано",  color: "#a855f7" },
-        thinking: { emoji: "🤔", label: "задумливо",  color: "#10b981" },
+        thinking: { emoji: "🤔", label: "задумливо", color: "#10b981" },
         neutral:  { emoji: "😐", label: "нейтрально", color: "#6b7280" },
+        angry:    { emoji: "😠", label: "злісно",     color: "#ef4444" },
+        disgust:  { emoji: "🤢", label: "огида",      color: "#84cc16" },
     };
 
     // Порог впевненості для показу бейджу на повідомленні
     const EMOTION_BADGE_THRESHOLD = 0.40;
 
     // Поточний стан аватара (для плавних переходів між анімаціями)
-    let _currentAvatarEmotion = "neutral";
+    let _lastAvatarFilename = "";
 
     /**
      * Плавна зміна анімації аватара з фейдом.
-     * Якщо нова емоція збігається з поточною → нічого не робимо (уникаємо дублювання).
+     * Пропускаємо лише якщо файл той самий (зміна рівня впевненості → інший .mp4).
      */
     function applyAvatarTransition(emotion, filename) {
         if (!avatarVideo) return;
-        if (_currentAvatarEmotion === emotion) return;
+        if (!filename) return;
+        if (_lastAvatarFilename === filename) return;
         const sourceEl = avatarVideo.querySelector("source");
         if (!sourceEl) return;
-        if ((sourceEl.src || "").includes(filename)) return;
 
         // Плавне згасання → зміна джерела → поява (transition smoothing)
         avatarVideo.style.transition = "opacity 0.3s ease";
@@ -246,7 +248,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             avatarVideo.load();
             avatarVideo.play().catch(() => {});
             avatarVideo.style.opacity = "1";
-            _currentAvatarEmotion = emotion;
+            _lastAvatarFilename = filename;
         }, 300);
     }
 
@@ -292,22 +294,25 @@ window.addEventListener("DOMContentLoaded", async () => {
     const confirmLogout = document.getElementById("confirmLogout");
 
     /**
-     * Мап емоцій → відео-файли аватара.
-     * Синхронізовано з AvatarController.ANIMATION_MAP у emotion_engine.py.
-     * Fallback для відсутніх файлів: sad.mp4 → speak_blink.mp4
+     * Основний кліп на клас (high confidence) — узгоджено з AvatarController у emotion_engine.py.
+     * Усі 12 файлів з avatar/animations/ використовуються на бекенді через high/med/fallback.
      */
     const AVATAR_VIDEO_MAP = {
-        neutral:  "speak_blink.mp4",
-        happy:    "happy.mp4",
-        sad:      "speak_blink.mp4",   // fallback: sad.mp4 відсутній
+        neutral:  "muse.mp4",
+        happy:    "excited.mp4",
+        sad:      "sad.mp4",
         surprise: "surprize1.mp4",
         thinking: "squinted1.mp4",
-        // emoji fallback (старий формат)
-        "😊": "happy.mp4",
-        "😄": "speak_blink.mp4",
+        angry:    "angry.mp4",
+        disgust:  "disgust.mp4",
+        // emoji fallback (старий формат парсингу)
+        "😊": "excited.mp4",
+        "😄": "excited.mp4",
         "😲": "surprize1.mp4",
         "🤔": "squinted1.mp4",
-        "😍": "happy.mp4",
+        "😍": "excited.mp4",
+        "😠": "angry.mp4",
+        "🤢": "disgust.mp4",
     };
 
     /**
@@ -329,17 +334,23 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         // Якщо є дані від EmotionEngine (user_emotion) — надаємо пріоритет
         const ue = data.user_emotion;
+        let filename;
         if (ue && ue.emotion && ue.emotion !== "neutral" && ue.confidence >= 0.45) {
             displayEmotion = ue.emotion;
             const meta = EMOTION_META[ue.emotion];
             displayLabel = meta ? `${meta.emoji} ${meta.label}` : ue.emotion;
+            filename =
+                ue.avatar_filename ||
+                AVATAR_VIDEO_MAP[displayEmotion] ||
+                "muse.mp4";
         } else {
-            // Якщо user_emotion нейтральна — показуємо емоцію асистента
-            const key = AVATAR_VIDEO_MAP[displayEmotion] ? displayEmotion : "neutral";
-            displayEmotion = key;
+            const rawKey = AVATAR_VIDEO_MAP[displayEmotion] ? displayEmotion : "neutral";
+            displayEmotion = rawKey;
+            filename =
+                data.avatar_filename ||
+                AVATAR_VIDEO_MAP[displayEmotion] ||
+                "muse.mp4";
         }
-
-        const filename = AVATAR_VIDEO_MAP[displayEmotion] || "speak_blink.mp4";
 
         // Плавний перехід (через applyAvatarTransition)
         if (avatarVideo) {
@@ -356,7 +367,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     function handleUserEmotionEvent(data) {
         if (!data || !data.emotion) return;
         if (data.emotion === "neutral" || (data.confidence || 0) < 0.45) return;
-        const filename = AVATAR_VIDEO_MAP[data.emotion] || "speak_blink.mp4";
+        const filename =
+            data.avatar_filename ||
+            AVATAR_VIDEO_MAP[data.emotion] ||
+            "muse.mp4";
         applyAvatarTransition(data.emotion, filename);
         if (emotionLabel) {
             const meta = EMOTION_META[data.emotion];

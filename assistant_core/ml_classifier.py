@@ -80,7 +80,15 @@ except ImportError:  # pragma: no cover
 
 
 # ── Список класів (мусить збігатися з emotion_engine.EMOTION_LIST) ────────────
-EMOTION_CLASSES: List[str] = ["neutral", "happy", "sad", "surprise", "thinking"]
+EMOTION_CLASSES: List[str] = [
+    "neutral",
+    "happy",
+    "sad",
+    "surprise",
+    "thinking",
+    "angry",
+    "disgust",
+]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -310,7 +318,7 @@ class EmotionMLClassifier:
     # ── Інференс ─────────────────────────────────────────────────────────────
     def predict(self, text: str) -> Dict[str, float]:
         """
-        Повертає словник {emotion: probability} для всіх 5 класів.
+        Повертає словник {emotion: probability} для усіх класів EMOTION_CLASSES.
 
         Якщо модель не завантажена — повертає рівномірний розподіл для класу
         neutral (≈1.0) і нулі для інших, щоб ML-внесок не псував лексичні бали.

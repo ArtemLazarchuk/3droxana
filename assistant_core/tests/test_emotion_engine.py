@@ -25,6 +25,7 @@ import math
 import pytest
 
 from assistant_core.emotion_engine import (
+    ANIMATION_CLIP_FILES,
     AvatarController,
     ContextWindow,
     EMOTION_LIST,
@@ -120,18 +121,18 @@ class TestIntensityModifier:
         self.mod = IntensityModifier()
 
     def test_high_modifier_amplifies(self):
-        before = {"happy": 1.0, "sad": 0.0, "neutral": 0.0, "surprise": 0.0, "thinking": 0.0}
+        before = {e: (1.0 if e == "happy" else 0.0) for e in EMOTION_LIST}
         after = self.mod.apply(["дуже", "радий"], before)
         assert after["happy"] > before["happy"]
 
     def test_extreme_modifier_amplifies_more(self):
-        before = {"happy": 1.0, "sad": 0.0, "neutral": 0.0, "surprise": 0.0, "thinking": 0.0}
+        before = {e: (1.0 if e == "happy" else 0.0) for e in EMOTION_LIST}
         high = self.mod.apply(["дуже"], before)
         extreme = self.mod.apply(["неймовірно"], before)
         assert extreme["happy"] >= high["happy"]
 
     def test_no_modifier_no_change(self):
-        before = {"happy": 1.0, "sad": 0.0, "neutral": 0.0, "surprise": 0.0, "thinking": 0.0}
+        before = {e: (1.0 if e == "happy" else 0.0) for e in EMOTION_LIST}
         after = self.mod.apply(["звичайний", "текст"], before)
         assert after == before
 
@@ -145,13 +146,13 @@ class TestNegationProcessor:
         self.neg = NegationProcessor()
 
     def test_negation_inverts_dominant_emotion(self):
-        scores = {"happy": 5.0, "sad": 0.0, "neutral": 0.0, "surprise": 0.0, "thinking": 0.0}
+        scores = {e: (5.0 if e == "happy" else 0.0) for e in EMOTION_LIST}
         result = self.neg.apply(["не", "радий"], scores)
         assert result["happy"] == 0.0
         assert result["sad"] > 0  # happy → sad
 
     def test_no_negation_no_change(self):
-        scores = {"happy": 5.0, "sad": 0.0, "neutral": 0.0, "surprise": 0.0, "thinking": 0.0}
+        scores = {e: (5.0 if e == "happy" else 0.0) for e in EMOTION_LIST}
         result = self.neg.apply(["я", "радий"], scores)
         assert result["happy"] == 5.0
 
@@ -174,13 +175,21 @@ class TestScoreAggregator:
     def test_combine_with_ml(self):
         lex = {e: 0.0 for e in EMOTION_LIST}
         pat = {e: 0.0 for e in EMOTION_LIST}
-        ml = {"happy": 1.0, "sad": 0.0, "neutral": 0.0, "surprise": 0.0, "thinking": 0.0}
+        ml = {e: (1.0 if e == "happy" else 0.0) for e in EMOTION_LIST}
         out = self.agg.combine(lex, pat, ml)
         assert out["happy"] > out["sad"]
         assert out["happy"] == pytest.approx(self.agg.W_ML * self.agg.ML_SIGNAL_SCALE)
 
     def test_softmax_sums_to_one(self):
-        scores = {"happy": 3.0, "sad": 1.0, "neutral": 0.5, "surprise": 0.2, "thinking": 0.1}
+        scores = {
+            "happy": 3.0,
+            "sad": 1.0,
+            "neutral": 0.5,
+            "surprise": 0.2,
+            "thinking": 0.1,
+            "angry": 0.05,
+            "disgust": 0.05,
+        }
         normalized = self.agg.softmax(scores)
         assert sum(normalized.values()) == pytest.approx(1.0, rel=1e-6)
         # Найвищий бал → найвища ймовірність
@@ -235,7 +244,9 @@ class TestTransitionMatrix:
         assert self.tm.allowed("happy", "sad", 1.0) or not self.tm.allowed("happy", "sad", 1.0)
 
     def test_best_allowed_falls_back_to_neutral(self):
-        scores = {"sad": 0.99, "neutral": 0.01, "happy": 0.0, "surprise": 0.0, "thinking": 0.0}
+        scores = {e: 0.0 for e in EMOTION_LIST}
+        scores["sad"] = 0.99
+        scores["neutral"] = 0.01
         emotion, conf = self.tm.best_allowed("happy", scores)
         # sad дозволено, бо confidence=0.99×0.3=0.297 ≈ 0.30 — правило «≥»
         assert emotion in {"sad", "neutral"}
@@ -304,6 +315,14 @@ class TestEmotionClassifierE2E:
 class TestAvatarController:
     def setup_method(self) -> None:
         self.ctrl = AvatarController()
+
+    def test_all_disk_clips_are_referenced(self) -> None:
+        used = set()
+        for high, med, low in self.ctrl.ANIMATION_MAP.values():
+            used.add(high)
+            used.add(med)
+            used.add(low)
+        assert used == set(ANIMATION_CLIP_FILES)
 
     def test_high_confidence_picks_high_animation(self):
         result = EmotionResult(

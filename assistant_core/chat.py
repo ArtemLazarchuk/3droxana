@@ -12,7 +12,12 @@ from dotenv import load_dotenv
 from together import Together
 
 from assistant_core.link_indexing import build_rag_context
-from assistant_core.emotion_engine import analyze_emotion, reset_session_context
+from assistant_core.emotion_engine import (
+    analyze_emotion,
+    get_avatar_controller,
+    reset_session_context,
+    select_animation_for_emotion_label,
+)
 
 
 class ChatSessionNotFound(Exception):
@@ -35,7 +40,7 @@ client = Together(api_key=TOGETHER_API_KEY)
 
 # Мітки емоцій для аватара (англ.); збігайте з `videoMap` у frontend/js/chat.js
 ALLOWED_EMOTIONS: FrozenSet[str] = frozenset(
-    {"neutral", "happy", "sad", "surprise", "thinking"}
+    {"neutral", "happy", "sad", "surprise", "thinking", "angry", "disgust"}
 )
 
 # Назва сесії в списку «Історія»; поки лишається так — підставляємо тему з першої відповіді моделі.
@@ -67,8 +72,9 @@ SYSTEM_PROMPT = (
     "Без сирого URL у тексті (URL лише в полі «посилання»). Без емодзі, якщо не виняток вище.}\n"
     "текст чату: {короткий нейтральний заголовок теми, як назва розділу. "
     "НЕ питання. Наприклад: «Оцінювання в КПІ», «Стипендії та бал», «Важливо для першокурсників».}\n"
-    "емоція: {СТРОГО одне англійське слово: neutral, happy, sad, surprise, thinking. "
-    "neutral — спокійно; happy — радісно; sad — шкода; surprise — здивування; thinking — роздуми. Лише слово.}\n"
+    "емоція: {СТРОГО одне англійське слово: neutral, happy, sad, surprise, thinking, angry, disgust. "
+    "neutral — спокійно; happy — радісно; sad — шкода; surprise — здивування; thinking — роздуми; "
+    "angry — роздратування; disgust — огида. Лише слово.}\n"
     "посилання: {повний URL з контексту, якщо доречно; інакше рівно: немає}\n"
     "Не додавай нічого за межами цього шаблону. НЕ змінюй назви полів і порядок полів."
 )
@@ -134,6 +140,9 @@ def _normalize_emotion(raw: str) -> str:
         "😲": "surprise",
         "🤔": "thinking",
         "😍": "happy",
+        "😠": "angry",
+        "🤢": "disgust",
+        "😤": "angry",
     }
     return emoji_map.get(raw.strip(), "neutral")
 
@@ -320,6 +329,9 @@ async def stream_chat_events(
         "scores":      {k: round(v, 4) for k, v in user_emotion_result.scores.items()},
         "method":      user_emotion_result.method,
         "tokens":      user_emotion_result.tokens_matched[:10],  # топ-10 для дебагу
+        "avatar_filename": get_avatar_controller().select_animation(
+            user_emotion_result
+        ).filename,
     }
 
     await append_user_message(db, session_id, display_user)
@@ -360,6 +372,9 @@ async def stream_chat_events(
                     "emotion": parsed["emotion"],           # емоція АСИСТЕНТА (від LLM)
                     "title": parsed["title"],
                     "user_emotion": user_emotion_data,      # емоція КОРИСТУВАЧА (від EmotionEngine)
+                    "avatar_filename": select_animation_for_emotion_label(
+                        parsed["emotion"]
+                    ).filename,
                 }
             )
             return
@@ -415,6 +430,9 @@ async def process_chat(
         "confidence": round(user_emotion_result.confidence, 4),
         "scores":     {k: round(v, 4) for k, v in user_emotion_result.scores.items()},
         "method":     user_emotion_result.method,
+        "avatar_filename": get_avatar_controller().select_animation(
+            user_emotion_result
+        ).filename,
     }
 
     return parsed

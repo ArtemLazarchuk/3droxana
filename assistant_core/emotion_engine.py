@@ -63,10 +63,36 @@ from assistant_core.ml_classifier import (
 # КОНСТАНТИ ТА ТИПИ
 # ══════════════════════════════════════════════════════════════════════════════
 
-Emotion = str  # literal: "neutral" | "happy" | "sad" | "surprise" | "thinking"
+Emotion = str  # 7 класів — у відповідності до кліпів у avatar/animations/
 
-EMOTIONS: FrozenSet[Emotion] = frozenset({"neutral", "happy", "sad", "surprise", "thinking"})
-EMOTION_LIST: List[Emotion] = ["neutral", "happy", "sad", "surprise", "thinking"]
+EMOTIONS: FrozenSet[Emotion] = frozenset(
+    {"neutral", "happy", "sad", "surprise", "thinking", "angry", "disgust"}
+)
+EMOTION_LIST: List[Emotion] = [
+    "neutral",
+    "happy",
+    "sad",
+    "surprise",
+    "thinking",
+    "angry",
+    "disgust",
+]
+
+# Фактичний набір .mp4 у avatar/animations/ — усі використовуються в ANIMATION_MAP (high/med/fallback).
+ANIMATION_CLIP_FILES: Tuple[str, ...] = (
+    "angry.mp4",
+    "confused.mp4",
+    "disgust.mp4",
+    "excited.mp4",
+    "fear.mp4",
+    "happy.mp4",
+    "muse.mp4",
+    "sad.mp4",
+    "speak_blink.mp4",
+    "speak.mp4",
+    "squinted1.mp4",
+    "surprize1.mp4",
+)
 
 # Мінімальна впевненість для зміни стану аватара (нижче — лишаємо neutral)
 CONFIDENCE_THRESHOLD = 0.30
@@ -278,10 +304,10 @@ class EmotionLexicon:
         "тяжкий":      {"sad": 2.5},
         "тяжка":       {"sad": 2.5},
         "важко":       {"sad": 2.5},
-        "погано":      {"sad": 3.0},
-        "поганий":     {"sad": 2.5},
-        "погана":      {"sad": 2.5},
-        "жахливо":     {"sad": 4.0},
+        "погано":      {"sad": 3.0, "disgust": 0.8},
+        "поганий":     {"sad": 2.5, "angry": 0.8},
+        "погана":      {"sad": 2.5, "angry": 0.8},
+        "жахливо":     {"sad": 4.0, "disgust": 1.2},
         "жахливий":    {"sad": 3.5},
         "жахлива":     {"sad": 3.5},
         "жах":         {"sad": 3.0},
@@ -402,6 +428,58 @@ class EmotionLexicon:
         "🤷‍♂️": {"thinking": 2.5},
         "🤷‍♀️": {"thinking": 2.5},
         "🧩": {"thinking": 2.5},
+
+        # ── ANGRY ─────────────────────────────────────────────────────────────
+        "злий":        {"angry": 3.5},
+        "зла":         {"angry": 3.5},
+        "зле":         {"angry": 3.5},
+        "злість":      {"angry": 3.5},
+        "злюсь":       {"angry": 4.0},
+        "злюся":       {"angry": 4.0},
+        "бісить!":     {"angry": 3.5},
+        "дратує":      {"angry": 3.0},
+        "дістало":     {"angry": 3.5},
+        "ненавиджу":   {"angry": 4.5},
+        "ненависний":  {"angry": 3.5},
+        "ненависна":   {"angry": 3.5},
+        "розлючений":  {"angry": 4.0},
+        "розлючена":   {"angry": 4.0},
+        "лютий":       {"angry": 3.5},
+        "люта":        {"angry": 3.5},
+        "ярістний":    {"angry": 3.5},
+        "ярісна":      {"angry": 3.5},
+        "ярість":      {"angry": 3.5},
+        "дурниця":     {"angry": 2.5, "disgust": 1.0},
+        "чорт":        {"angry": 3.0},
+        "блін":        {"angry": 2.0},
+        "вбіса":       {"angry": 3.5},
+        "бісовий":     {"angry": 3.0},
+        "чудовищно":   {"angry": 2.5},
+        "😠": {"angry": 4.5},
+        "😡": {"angry": 5.0},
+        "🤬": {"angry": 5.0},
+        "💢": {"angry": 3.5},
+
+        # ── DISGUST ───────────────────────────────────────────────────────────
+        "огидно":      {"disgust": 4.0},
+        "огидний":     {"disgust": 3.5},
+        "огидна":      {"disgust": 3.5},
+        "мерзенно":    {"disgust": 3.5},
+        "мерзенний":   {"disgust": 3.5},
+        "мерзенна":    {"disgust": 3.5},
+        "гидко":       {"disgust": 3.5},
+        "гидота":      {"disgust": 3.5},
+        "тошно":       {"disgust": 3.5},
+        "бридко":      {"disgust": 3.5},
+        "бридота":     {"disgust": 3.5},
+        "бридкий":     {"disgust": 3.5},
+        "бридка":      {"disgust": 3.5},
+        "фу":          {"disgust": 3.5},
+        "фі":          {"disgust": 3.0},
+        "відраза":     {"disgust": 4.0},
+        "🤢": {"disgust": 4.5},
+        "🤮": {"disgust": 4.5},
+        "🤧": {"disgust": 2.0},
     }
 
     def __init__(self) -> None:
@@ -467,13 +545,15 @@ class PatternAnalyzer:
     # (regex_pattern, {emotion: score_добавка})
     PATTERNS: List[Tuple[str, Dict[Emotion, float]]] = [
         # Подвійний/потрійний оклик
-        (r"!{2,}", {"happy": 1.5, "surprise": 1.0}),
+        (r"!{2,}", {"happy": 1.2, "surprise": 1.0, "angry": 0.8}),
+        # Чотири й більше окликів — частіше агресія / напруження
+        (r"!{4,}", {"angry": 2.5, "surprise": 1.0}),
         # Питальний знак
         (r"\?{1,}", {"thinking": 1.5}),
         # Питання + оклик
         (r"[?!]{2,}", {"surprise": 2.0, "thinking": 0.5}),
-        # Caps lock (≥4 символів)
-        (r"\b[А-ЯЁЇІЄA-Z]{4,}\b", {"surprise": 1.0, "happy": 0.5}),
+        # Caps lock (≥4 символів) → злість / акцент
+        (r"\b[А-ЯЁЇІЄA-Z]{4,}\b", {"angry": 2.5, "surprise": 0.8}),
         # Повтор голосних (аааа, оооо)
         (r"([аеиіоуяєї])\1{2,}", {"surprise": 2.0}),
         # Три і більше крапки
@@ -643,6 +723,8 @@ class NegationProcessor:
         "sad":      "happy",
         "surprise": "thinking",
         "thinking": "neutral",
+        "angry":    "neutral",
+        "disgust":  "neutral",
         "neutral":  "neutral",
     }
 
@@ -895,11 +977,63 @@ class TransitionMatrix:
     """
 
     MATRIX: Dict[Emotion, Dict[Emotion, float]] = {
-        "neutral":  {"neutral": 1.0, "happy": 1.0, "sad": 1.0, "surprise": 1.0, "thinking": 1.0},
-        "happy":    {"neutral": 1.0, "happy": 1.0, "sad": 0.3, "surprise": 0.8, "thinking": 0.7},
-        "sad":      {"neutral": 1.0, "happy": 0.3, "sad": 1.0, "surprise": 0.6, "thinking": 0.8},
-        "surprise": {"neutral": 1.0, "happy": 0.8, "sad": 0.6, "surprise": 1.0, "thinking": 0.7},
-        "thinking": {"neutral": 1.0, "happy": 0.7, "sad": 0.7, "surprise": 0.5, "thinking": 1.0},
+        "neutral": {
+            **{e: 1.0 for e in EMOTION_LIST},
+        },
+        "happy": {
+            "neutral": 1.0,
+            "happy": 1.0,
+            "sad": 0.3,
+            "surprise": 0.8,
+            "thinking": 0.7,
+            "angry": 0.35,
+            "disgust": 0.35,
+        },
+        "sad": {
+            "neutral": 1.0,
+            "happy": 0.3,
+            "sad": 1.0,
+            "surprise": 0.6,
+            "thinking": 0.8,
+            "angry": 0.55,
+            "disgust": 0.5,
+        },
+        "surprise": {
+            "neutral": 1.0,
+            "happy": 0.8,
+            "sad": 0.6,
+            "surprise": 1.0,
+            "thinking": 0.7,
+            "angry": 0.4,
+            "disgust": 0.35,
+        },
+        "thinking": {
+            "neutral": 1.0,
+            "happy": 0.7,
+            "sad": 0.7,
+            "surprise": 0.5,
+            "thinking": 1.0,
+            "angry": 0.45,
+            "disgust": 0.4,
+        },
+        "angry": {
+            "neutral": 1.0,
+            "happy": 0.25,
+            "sad": 0.55,
+            "surprise": 0.4,
+            "thinking": 0.5,
+            "angry": 1.0,
+            "disgust": 0.65,
+        },
+        "disgust": {
+            "neutral": 1.0,
+            "happy": 0.2,
+            "sad": 0.5,
+            "surprise": 0.35,
+            "thinking": 0.45,
+            "angry": 0.6,
+            "disgust": 1.0,
+        },
     }
 
     def allowed(
@@ -1028,8 +1162,7 @@ class EmotionClassifier:
         ml_scores: Optional[Dict[Emotion, float]] = None
         if ml_used:
             ml_scores = self._ml.predict(text)
-            # Підтримка повного словника (на випадок якщо модель навчена не на
-            # всіх 5 класах)
+            # Підтримка повного словника (на випадок якщо модель навчена не на всіх класах)
             ml_scores = {e: ml_scores.get(e, 0.0) for e in EMOTION_LIST}
 
         # Крок 4: Зважена комбінація сигналів (lex + pat [+ ml])
@@ -1114,29 +1247,27 @@ class AvatarController:
     ──────────────────────────
     1. Якщо confidence > HIGH_THRESHOLD → «сильна» анімація
     2. Якщо confidence > MED_THRESHOLD  → «середня» анімація
-    3. Інакше → нейтральна (speak_blink.mp4)
+    3. Інакше → fallback-кліп (м'яка міміка).
 
-    Таблиця анімацій (файли у папці avatar/animations/):
-    ──────────────────────────────────────────────────────
-    Емоція    │ Впевненість     │ Файл
-    ──────────┼─────────────────┼──────────────────
-    happy     │ будь-яка        │ happy.mp4
-    sad       │ будь-яка        │ speak_blink.mp4  ← fallback (sad.mp4 відсутній)
-    surprise  │ будь-яка        │ surprize1.mp4
-    thinking  │ будь-яка        │ squinted1.mp4
-    neutral   │ будь-яка        │ speak_blink.mp4
+    У папці 12 файлів (.mp4) — усі включені хоча б раз у трійках (high, med,
+    fallback); див. ANIMATION_CLIP_FILES.
     """
 
     HIGH_CONFIDENCE = 0.65
     MED_CONFIDENCE  = 0.45
 
+    # Базовий кліп, якщо клас невідомий або немає запису в мапі
+    DEFAULT_CLIP = "muse.mp4"
+
     # emotion → (high_conf_file, med_conf_file, fallback_file)
     ANIMATION_MAP: Dict[Emotion, Tuple[str, str, str]] = {
-        "happy":    ("happy.mp4",      "happy.mp4",      "speak_blink.mp4"),
-        "sad":      ("speak_blink.mp4", "speak_blink.mp4", "speak_blink.mp4"),  # sad.mp4 відсутній
-        "surprise": ("surprize1.mp4",  "surprize1.mp4",  "speak_blink.mp4"),
-        "thinking": ("squinted1.mp4",  "squinted1.mp4",  "speak_blink.mp4"),
-        "neutral":  ("speak_blink.mp4", "speak_blink.mp4", "speak_blink.mp4"),
+        "neutral": ("muse.mp4", "speak_blink.mp4", "speak.mp4"),
+        "happy": ("excited.mp4", "happy.mp4", "speak_blink.mp4"),
+        "sad": ("sad.mp4", "speak.mp4", "muse.mp4"),
+        "surprise": ("surprize1.mp4", "fear.mp4", "confused.mp4"),
+        "thinking": ("squinted1.mp4", "confused.mp4", "speak_blink.mp4"),
+        "angry": ("angry.mp4", "speak.mp4", "fear.mp4"),
+        "disgust": ("disgust.mp4", "squinted1.mp4", "muse.mp4"),
     }
 
     def select_animation(self, result: EmotionResult) -> AvatarAnimation:
@@ -1149,9 +1280,10 @@ class AvatarController:
         Повертає:
             AvatarAnimation з назвою файлу та метаданими
         """
+        d = self.DEFAULT_CLIP
         high, med, fallback = self.ANIMATION_MAP.get(
             result.emotion,
-            ("speak_blink.mp4", "speak_blink.mp4", "speak_blink.mp4"),
+            (d, d, d),
         )
 
         if result.confidence >= self.HIGH_CONFIDENCE:
@@ -1218,13 +1350,32 @@ def analyze_emotion(text: str) -> EmotionResult:
     return get_classifier().analyze(text)
 
 
+def select_animation_for_emotion_label(
+    emotion: str,
+    confidence: float = 0.72,
+) -> AvatarAnimation:
+    """
+    Вибір анімації лише за міткою (наприклад емоція з промпту асистента), без NLP.
+    """
+    em: Emotion = emotion if emotion in EMOTIONS else "neutral"
+    one_hot = {e: (1.0 if e == em else 0.0) for e in EMOTION_LIST}
+    result = EmotionResult(
+        emotion=em,
+        confidence=confidence,
+        scores=dict(one_hot),
+        raw_scores=dict(one_hot),
+        method="emotion_label",
+    )
+    return get_avatar_controller().select_animation(result)
+
+
 def get_avatar_animation(text: str) -> AvatarAnimation:
     """
     Повний пайплайн: текст → анімація аватара.
 
     Використання:
         anim = get_avatar_animation("Я так втомився сьогодні...")
-        print(anim.filename)  # "speak_blink.mp4"
+        print(anim.filename)  # "sad.mp4"
         print(anim.emotion)   # "sad"
 
     Параметри:
@@ -1251,7 +1402,7 @@ def get_engine_status() -> Dict:
     Поля:
         ml_available     – чи sklearn встановлено
         ml_loaded        – чи натреновану модель завантажено
-        emotions         – список 5 класів моделі
+        emotions         – список класів моделі (EMOTION_LIST)
         threshold        – поріг впевненості
         context_window   – розмір контекстного вікна
         weights_with_ml  – ваги ансамблю при наявності ML

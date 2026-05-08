@@ -9,7 +9,7 @@
  *   3. Виконує POST /api/emotion/analyze при кліку «Аналізувати»
  *   4. Візуалізує:
  *        – вибрану емоцію + впевненість
- *        – розподіл по 5 класах (стовпці softmax)
+ *        – розподіл по 7 класах (стовпці softmax)
  *        – внески компонентів (lexicon / pattern / ml)
  *        – токени, що вплинули на рішення
  *        – зміну анімації 3D-аватара (з плавним фейдом)
@@ -33,18 +33,29 @@
         surprise: { emoji: "😲", label: "здивування",  color: "#a855f7" },
         thinking: { emoji: "🤔", label: "роздуми",     color: "#10b981" },
         neutral:  { emoji: "😐", label: "нейтрально",  color: "#6b7280" },
+        angry:    { emoji: "😠", label: "злість",      color: "#ef4444" },
+        disgust:  { emoji: "🤢", label: "огида",       color: "#84cc16" },
     };
 
-    // Файли анімацій для 3D-аватара (синхронізовано з AvatarController)
     const AVATAR_VIDEO = {
-        neutral:  "speak_blink.mp4",
-        happy:    "happy.mp4",
-        sad:      "speak_blink.mp4",
+        neutral: "muse.mp4",
+        happy: "excited.mp4",
+        sad: "sad.mp4",
         surprise: "surprize1.mp4",
         thinking: "squinted1.mp4",
+        angry: "angry.mp4",
+        disgust: "disgust.mp4",
     };
 
-    const ORDER = ["happy", "sad", "surprise", "thinking", "neutral"];
+    const ORDER = [
+        "happy",
+        "sad",
+        "surprise",
+        "thinking",
+        "angry",
+        "disgust",
+        "neutral",
+    ];
 
     // Збереження поточного стану аватара для уникнення дубль-перемикань
     let currentAvatarEmotion = "neutral";
