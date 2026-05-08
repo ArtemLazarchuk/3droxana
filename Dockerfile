@@ -12,14 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Каталог під emotion_model.joblib (файл у git немає — змонтуйте або скопіюйте вручну)
-RUN mkdir -p /app/models
-
-# Project code (backend, assistant logic, frontend, avatar)
+# Project code (backend, assistant logic, frontend, avatar, shipped ML model)
 COPY backend ./backend
 COPY assistant_core ./assistant_core
 COPY frontend ./frontend
 COPY avatar ./avatar
+COPY models ./models
 
 # Port
 EXPOSE 6060

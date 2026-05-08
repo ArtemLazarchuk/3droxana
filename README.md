@@ -117,15 +117,13 @@ docker run -p 6060:6060 -v "$(pwd)/.env:/app/.env:ro" 3droxana
 
 3. Якщо потрібен лише перелік змінних — використовуйте `-e` (як нижче).
 
-Повний ML-пайплайн потребує файлу **`models/emotion_model.joblib`** (у репозиторії його немає). Після тренування на хості скопіюйте в образ або змонтуйте:
+Штатна **ML-модель** (`models/emotion_model.joblib`) входить у репозиторій і потрапляє в Docker-образ. Щоб підмінити її своєю після повторного тренування:
 
 ```bash
 docker run -p 6060:6060 --env-file .env \
   -v "$(pwd)/models/emotion_model.joblib:/app/models/emotion_model.joblib:ro" \
   3droxana
 ```
-
-Якщо моделі немає, демо покаже «ML-модель не натренована», але **scikit-learn у контейнері вже є** (див. `requirements.txt`).
 
 Альтернатива — явно передати змінні вручну:
 
@@ -150,6 +148,6 @@ docker run -p 6060:6060 \
 - `assistant_core/` — бізнес‑логіка чат‑асистента (виклики LLM, парсинг відповіді, оновлення сесій).
 - `frontend/` — статичні HTML/CSS/JS‑сторінки для інтерфейсу.
 - `avatar/` — медіафайли для 3D‑/анімаційного аватара.
-- `requirements.txt` — список Python‑залежностей.
+- `models/emotion_model.joblib` — ML-класифікатор емоцій (можна перетренувати: `python -m scripts.train_emotion_model` у venv).
 - `Dockerfile` — опис Docker‑образу для продакшен/контейнерного запуску.
 - `.env` — **локальні секрети** (не комітяться в git).
