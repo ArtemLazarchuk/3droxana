@@ -304,6 +304,12 @@
         return root;
     }
 
+    const AVATAR_TIER_LABEL = {
+        1: "делікатно",
+        2: "помірно",
+        3: "найвиразніше",
+    };
+
     function applyAvatar(data) {
         const meta = EMOTION_META[data.emotion] || EMOTION_META.neutral;
         const filename =
@@ -311,13 +317,17 @@
             AVATAR_VIDEO[data.emotion] ||
             AVATAR_VIDEO.neutral;
         const priority = (data.avatar && data.avatar.priority) ?? "—";
+        const priorityText =
+            typeof priority === "number" && AVATAR_TIER_LABEL[priority]
+                ? `${priority} (${AVATAR_TIER_LABEL[priority]})`
+                : String(priority);
 
         $avatarEmoji.textContent = meta.emoji;
         $avatarLabel.textContent = meta.label;
         $avatarConf.textContent = `впевненість: ${(data.confidence * 100).toFixed(1)} %`;
         $avatarLabel.style.color = meta.color;
         $avatarFile.textContent = filename;
-        $avatarPriority.textContent = String(priority);
+        $avatarPriority.textContent = priorityText;
 
         if (!$avatarVideo) return;
         const sourceEl = $avatarVideo.querySelector("source");

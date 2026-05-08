@@ -383,6 +383,21 @@ class TestAvatarController:
         anim = self.ctrl.select_animation(result)
         assert anim.priority == 1
 
+    def test_demo_responsive_bumps_fallback_to_med_for_nonneutral(self):
+        """У демо при низькій впевненості не показуємо лише generic fallback."""
+        result = EmotionResult(
+            emotion="thinking",
+            confidence=0.12,
+            scores={e: 0.0 for e in EMOTION_LIST},
+            raw_scores={}, method="lexicon",
+        )
+        norm = self.ctrl.select_animation(result, demo_responsive=False)
+        demo = self.ctrl.select_animation(result, demo_responsive=True)
+        assert norm.priority == 1
+        assert norm.filename == "speak_blink.mp4"
+        assert demo.priority == 2
+        assert demo.filename == "confused.mp4"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 10. EmotionMLClassifier (graceful degradation)

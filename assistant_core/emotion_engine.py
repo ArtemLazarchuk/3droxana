@@ -1438,9 +1438,12 @@ class AvatarController:
 
     Стратегія вибору анімації:
     ──────────────────────────
-    1. Якщо confidence > HIGH_THRESHOLD → «сильна» анімація
-    2. Якщо confidence > MED_THRESHOLD  → «середня» анімація
-    3. Інакше → fallback-кліп (м'яка міміка).
+    1. Якщо confidence > HIGH_THRESHOLD → «сильна» анімація (**priority = 3**)
+    2. Якщо confidence > MED_THRESHOLD  → «середня» анімація (**priority = 2**)
+    3. Інакше → fallback-кліп (**priority = 1**)
+
+    Поле ``priority`` у відповіді API — це **рівень виразності відео (1–3)**,
+    а не порядковий номер серед кандидат-емоцій. «3» = найвиразніший кліп для класу.
 
     У папці 12 файлів (.mp4) — усі включені хоча б раз у трійках (high, med,
     fallback); див. ANIMATION_CLIP_FILES.
@@ -1480,8 +1483,8 @@ class AvatarController:
 
         Параметри:
             result – результат класифікації EmotionResult
-            demo_responsive – якщо True (демо UI), пороги high/med трохи нижчі,
-                щоб частіше показувати виразніші кліпи без зміни самої моделі.
+            demo_responsive – якщо True (демо UI): пороги high/med трохи нижчі,
+                а для не-нейтрального класу мінімальний tier — «med», не generic fallback.
 
         Повертає:
             AvatarAnimation з назвою файлу та метаданими
@@ -1508,6 +1511,16 @@ class AvatarController:
         else:
             filename = fallback
             priority = 1
+
+        # Демо UI: клас уже вибраний, але впевненість низька — не лише fallback,
+        # а мінімум тематичний «середній» кліп (щоб не показувати speak_blink при «роздуми»).
+        if (
+            demo_responsive
+            and result.emotion != "neutral"
+            and priority == 1
+        ):
+            filename = med
+            priority = 2
 
         return AvatarAnimation(
             filename=filename,
