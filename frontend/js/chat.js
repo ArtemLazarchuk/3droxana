@@ -421,6 +421,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     /** Таймер циклічної зміни відео (null — не активний). */
     let avatarRotationTimerId = null;
 
+    /**
+     * Остання виразна емоція користувача за поточне відправлене повідомлення (поки LLM відповідає).
+     * Після `done` промпт часто дає neutral — не скидаємо аватар у muse, доки не нове повідомлення.
+     */
+    let stickyUserAvatarThisTurn = null;
+
     function clearAvatarRotation() {
         if (avatarRotationTimerId != null) {
             clearInterval(avatarRotationTimerId);
@@ -465,7 +471,8 @@ window.addEventListener("DOMContentLoaded", async () => {
      * Якщо event містить user_emotion (від EmotionEngine) — аватар реагує на емоцію КОРИСТУВАЧА.
      * Якщо є тільки emotion (від LLM) — аватар відображає стан АСИСТЕНТА.
      *
-     * Пріоритет: емоція користувача (якщо confidence ≥ USER_EMOTION_AVATAR_THRESHOLD) > емоція асистента
+     * Пріоритет: user_emotion із done (confidence ≥ порогу) > «липка» емоція цього відправлення
+     * (збережена з SSE user_emotion) > емоція асистента з промпта.
      */
     function applyAvatarEmotion(data) {
         clearAvatarRotation();
@@ -478,15 +485,36 @@ window.addEventListener("DOMContentLoaded", async () => {
         let displayEmotion = (data.emotion || "neutral").trim().toLowerCase();
         let displayLabel = displayEmotion;
 
-        // Якщо є дані від EmotionEngine (user_emotion) — надаємо пріоритет
         const ue = data.user_emotion;
+        const conf = (x) => Number(x) || 0;
+        const threshold = USER_EMOTION_AVATAR_THRESHOLD - 1e-9;
+        const ueStrong =
+            ue &&
+            ue.emotion &&
+            ue.emotion !== "neutral" &&
+            conf(ue.confidence) >= threshold;
+        const sticky = stickyUserAvatarThisTurn;
+        const stickyStrong =
+            sticky &&
+            sticky.emotion &&
+            sticky.emotion !== "neutral" &&
+            conf(sticky.confidence) >= threshold;
+
         let filename;
-        if (ue && ue.emotion && ue.emotion !== "neutral" && ue.confidence >= USER_EMOTION_AVATAR_THRESHOLD) {
+        if (ueStrong) {
             displayEmotion = ue.emotion;
             const meta = EMOTION_META[ue.emotion];
             displayLabel = meta ? `${meta.emoji} ${meta.label}` : ue.emotion;
             filename =
                 ue.avatar_filename ||
+                AVATAR_VIDEO_MAP[displayEmotion] ||
+                "muse.mp4";
+        } else if (stickyStrong) {
+            displayEmotion = sticky.emotion;
+            const meta = EMOTION_META[sticky.emotion];
+            displayLabel = meta ? `${meta.emoji} ${meta.label}` : sticky.emotion;
+            filename =
+                sticky.avatar_filename ||
                 AVATAR_VIDEO_MAP[displayEmotion] ||
                 "muse.mp4";
         } else {
@@ -512,12 +540,17 @@ window.addEventListener("DOMContentLoaded", async () => {
      */
     function handleUserEmotionEvent(data) {
         if (!data || !data.emotion) return;
-        if (data.emotion === "neutral" || (data.confidence || 0) < USER_EMOTION_AVATAR_THRESHOLD)
-            return;
+        const c = Number(data.confidence) || 0;
+        if (data.emotion === "neutral" || c < USER_EMOTION_AVATAR_THRESHOLD) return;
         const filename =
             data.avatar_filename ||
             AVATAR_VIDEO_MAP[data.emotion] ||
             "muse.mp4";
+        stickyUserAvatarThisTurn = {
+            emotion: data.emotion,
+            confidence: c,
+            avatar_filename: filename,
+        };
         startAvatarRotation(data.emotion, filename);
         if (emotionLabel) {
             const meta = EMOTION_META[data.emotion];
@@ -1194,6 +1227,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         syncAttachButton();
 
         chatInFlight = true;
+        stickyUserAvatarThisTurn = null;
         clearAvatarRotation();
         streamAbortController = new AbortController();
         setSendButtonMode("stop");
