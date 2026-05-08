@@ -3,9 +3,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Для scipy / scikit-learn (wheel) на slim-образі
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Каталог під emotion_model.joblib (файл у git немає — змонтуйте або скопіюйте вручну)
+RUN mkdir -p /app/models
 
 # Project code (backend, assistant logic, frontend, avatar)
 COPY backend ./backend

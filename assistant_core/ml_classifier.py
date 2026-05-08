@@ -391,5 +391,5 @@ def reload_ml_classifier() -> bool:
 
 
 def is_ml_available() -> bool:
-    """Зовнішня перевірка стану — чи доступна ML-частина прямо зараз."""
-    return _HAS_SKLEARN and get_ml_classifier().is_loaded
+    """Чи встановлено scikit-learn / joblib (імпорт успішний). Не вимагає файлу моделі."""
+    return _HAS_SKLEARN

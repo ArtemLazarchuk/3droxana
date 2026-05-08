@@ -1626,8 +1626,8 @@ def get_engine_status() -> Dict:
     Повертає поточний стан системи (для health-чеку та демо-сторінки).
 
     Поля:
-        ml_available     – чи sklearn встановлено
-        ml_loaded        – чи натреновану модель завантажено
+        ml_available     – чи встановлено scikit-learn (залежності ML)
+        ml_loaded        – чи з диска завантажено файл моделі (.joblib)
         emotions         – список класів моделі (EMOTION_LIST)
         threshold        – поріг впевненості
         context_window   – розмір контекстного вікна

@@ -21,7 +21,14 @@ from backend.api import routes_users
 from backend.db.mongodb import connect_to_mongo, close_mongo_connection
 
 
-load_dotenv()
+# .env не потрапляє в Docker-образ (див. .dockerignore). У контейнері:
+#   docker run --env-file .env …  або  -v /шлях/.env:/app/.env:ro
+# Необов’язково: DOTENV_PATH=/abs/path/.env
+_env_file = os.environ.get("DOTENV_PATH")
+if _env_file:
+    load_dotenv(_env_file)
+else:
+    load_dotenv()
 
 app = FastAPI()
 

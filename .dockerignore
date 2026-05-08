@@ -1,10 +1,12 @@
+# Секрети не входять у образ. На сервері: docker run --env-file .env …
+# або змонтуйте файл як -v /path/.env:/app/.env:ro
+.env
 venv
 .venv
 __pycache__
 *.pyc
 .git
 .gitignore
-.env
 *.md
 node_modules
 *.log
