@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Демо · Аналіз емоцій · 3D-аватар</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=10">
+    <link rel="stylesheet" href="/static/css/emotion-demo.css?v=1">
+</head>
+<body data-theme="dark">
+
+<header class="ed-header">
+    <div class="ed-header-inner">
+        <a href="/" class="ed-logo">
+            <i class="bi bi-cpu-fill"></i>
+            <span>EmotionEngine</span>
+        </a>
+        <nav class="ed-nav">
+            <a href="/chat" class="ed-nav-link"><i class="bi bi-chat-dots"></i> Чат</a>
+            <a href="/sites" class="ed-nav-link"><i class="bi bi-globe"></i> Сайти</a>
+            <a href="/emotion-demo" class="ed-nav-link active"><i class="bi bi-stars"></i> Демо алгоритму</a>
+        </nav>
+        <div class="ed-status" id="ed-status" title="Статус ML-моделі">
+            <span class="ed-status-dot" data-state="loading"></span>
+            <span id="ed-status-text">перевірка…</span>
+        </div>
+    </div>
+</header>
+
+<main class="ed-main">
+    <section class="ed-hero">
+        <h1 class="ed-title">
+            Демонстрація алгоритму
+            <span class="ed-title-accent">аналізу емоцій</span>
+        </h1>
+        <p class="ed-subtitle">
+            Програмне забезпечення для динамічних мімічних реакцій
+            3D-аватара на основі машинного навчання
+        </p>
+        <div class="ed-pipeline">
+            <div class="ed-pipeline-step"><span>1</span> Текст</div>
+            <i class="bi bi-arrow-right ed-pipeline-arrow"></i>
+            <div class="ed-pipeline-step"><span>2</span> Лексикон</div>
+            <i class="bi bi-arrow-right ed-pipeline-arrow"></i>
+            <div class="ed-pipeline-step"><span>3</span> Регекси</div>
+            <i class="bi bi-arrow-right ed-pipeline-arrow"></i>
+            <div class="ed-pipeline-step ed-pipeline-step--ml"><span>4</span> ML&nbsp;<i class="bi bi-cpu"></i></div>
+            <i class="bi bi-arrow-right ed-pipeline-arrow"></i>
+            <div class="ed-pipeline-step"><span>5</span> Softmax</div>
+            <i class="bi bi-arrow-right ed-pipeline-arrow"></i>
+            <div class="ed-pipeline-step"><span>6</span> Контекст</div>
+            <i class="bi bi-arrow-right ed-pipeline-arrow"></i>
+            <div class="ed-pipeline-step ed-pipeline-step--end"><span>7</span> 3D-аватар</div>
+        </div>
+    </section>
+
+    <section class="ed-grid">
+        <!-- Колонка вводу -->
+        <div class="ed-card ed-input-card">
+            <h2 class="ed-card-title"><i class="bi bi-pencil-square"></i> Вхідний текст</h2>
+
+            <textarea
+                id="ed-text"
+                class="ed-textarea"
+                rows="4"
+                placeholder="Напишіть текст українською — наприклад: «Я так втомився сьогодні…»"
+                autocomplete="off"
+            ></textarea>
+
+            <div class="ed-controls">
+                <label class="ed-checkbox">
+                    <input type="checkbox" id="ed-reset-context">
+                    <span>Скинути контекстну пам'ять перед аналізом</span>
+                </label>
+                <button id="ed-analyze-btn" class="ed-btn ed-btn-primary">
+                    <i class="bi bi-play-fill"></i>
+                    Аналізувати
+                </button>
+            </div>
+
+            <div class="ed-presets">
+                <span class="ed-presets-label">Швидкі приклади:</span>
+                <button class="ed-preset" data-text="Дякую, ти найкращий помічник у моєму житті!">😊 Радість</button>
+                <button class="ed-preset" data-text="Я провалив екзамен, мені дуже сумно">😔 Смуток</button>
+                <button class="ed-preset" data-text="Ого! Я не очікував такого результату!">😲 Здивування</button>
+                <button class="ed-preset" data-text="Цікаво, як це все працює насправді?">🤔 Роздуми</button>
+                <button class="ed-preset" data-text="Розклад занять опубліковано на сайті">😐 Нейтрально</button>
+                <button class="ed-preset" data-text="Я не дуже задоволений своїми оцінками">⚖️ Заперечення</button>
+            </div>
+        </div>
+
+        <!-- Колонка аватара -->
+        <div class="ed-card ed-avatar-card">
+            <h2 class="ed-card-title"><i class="bi bi-person-video"></i> 3D-аватар</h2>
+            <div class="ed-avatar-wrap">
+                <video id="ed-avatar-video" autoplay muted loop playsinline>
+                    <source src="/avatar/animations/speak_blink.mp4" type="video/mp4">
+                </video>
+                <div class="ed-avatar-overlay" id="ed-avatar-overlay">
+                    <div class="ed-avatar-emoji" id="ed-avatar-emoji">😐</div>
+                    <div class="ed-avatar-label" id="ed-avatar-label">нейтрально</div>
+                    <div class="ed-avatar-conf" id="ed-avatar-conf">впевненість: —</div>
+                </div>
+            </div>
+            <div class="ed-avatar-meta">
+                <div><span>Файл:</span> <code id="ed-avatar-file">speak_blink.mp4</code></div>
+                <div><span>Пріоритет:</span> <code id="ed-avatar-priority">—</code></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Розподіл ймовірностей -->
+    <section class="ed-card ed-distribution-card" id="ed-distribution-card" hidden>
+        <h2 class="ed-card-title">
+            <i class="bi bi-bar-chart-fill"></i> Розподіл ймовірностей (softmax)
+            <span class="ed-method-badge" id="ed-method-badge">—</span>
+        </h2>
+        <div class="ed-bars" id="ed-bars"></div>
+    </section>
+
+    <!-- Внески компонентів -->
+    <section class="ed-grid ed-grid-3">
+        <div class="ed-card" id="ed-comp-lex" hidden>
+            <h3 class="ed-comp-title"><i class="bi bi-book"></i> Лексикон</h3>
+            <div class="ed-comp-bars"></div>
+            <div class="ed-comp-tokens"></div>
+        </div>
+        <div class="ed-card" id="ed-comp-pat" hidden>
+            <h3 class="ed-comp-title"><i class="bi bi-regex"></i> Регекси</h3>
+            <div class="ed-comp-bars"></div>
+        </div>
+        <div class="ed-card" id="ed-comp-ml" hidden>
+            <h3 class="ed-comp-title">
+                <i class="bi bi-cpu"></i> ML-модель
+                <span class="ed-ml-tag">TF-IDF + LogReg</span>
+            </h3>
+            <div class="ed-comp-bars"></div>
+        </div>
+    </section>
+
+    <!-- Деталі та сирі дані -->
+    <section class="ed-card ed-details-card" id="ed-details-card" hidden>
+        <h2 class="ed-card-title"><i class="bi bi-list-columns"></i> Деталі рішення</h2>
+        <div class="ed-details-grid">
+            <div class="ed-detail">
+                <div class="ed-detail-label">Емоція</div>
+                <div class="ed-detail-value" id="ed-detail-emotion">—</div>
+            </div>
+            <div class="ed-detail">
+                <div class="ed-detail-label">Впевненість</div>
+                <div class="ed-detail-value" id="ed-detail-conf">—</div>
+            </div>
+            <div class="ed-detail">
+                <div class="ed-detail-label">Метод</div>
+                <div class="ed-detail-value" id="ed-detail-method">—</div>
+            </div>
+            <div class="ed-detail">
+                <div class="ed-detail-label">Контекстне згладжування</div>
+                <div class="ed-detail-value" id="ed-detail-smoothed">—</div>
+            </div>
+            <div class="ed-detail">
+                <div class="ed-detail-label">ML використано</div>
+                <div class="ed-detail-value" id="ed-detail-ml">—</div>
+            </div>
+            <div class="ed-detail">
+                <div class="ed-detail-label">Час обробки</div>
+                <div class="ed-detail-value" id="ed-detail-time">—</div>
+            </div>
+        </div>
+
+        <details class="ed-raw">
+            <summary>Сирі дані (JSON)</summary>
+            <pre id="ed-raw-json"></pre>
+        </details>
+    </section>
+
+    <!-- Інформація про систему -->
+    <section class="ed-card ed-info-card">
+        <h2 class="ed-card-title"><i class="bi bi-diagram-3"></i> Архітектура системи</h2>
+        <div id="ed-info-body" class="ed-info-body">
+            <p>Завантаження…</p>
+        </div>
+    </section>
+</main>
+
+<footer class="ed-footer">
+    <div>3droxana · 2026 · ML-based facial emotion classifier · KPI Diploma</div>
+</footer>
+
+<script src="/static/js/emotion-demo.js?v=1"></script>
+</body>
+</html>

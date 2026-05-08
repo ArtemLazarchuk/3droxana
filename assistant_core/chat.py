@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from together import Together
 
 from assistant_core.link_indexing import build_rag_context
+from assistant_core.emotion_engine import analyze_emotion, reset_session_context
 
 
 class ChatSessionNotFound(Exception):
@@ -308,8 +309,23 @@ async def stream_chat_events(
     display_user = cleaned
     if attachment_filename:
         display_user = f"{cleaned}\n\n📎 {attachment_filename}"
+
+    # ── Аналіз емоції КОРИСТУВАЧА через EmotionEngine ──────────────────────
+    # Це незалежний NLP-аналіз тексту до запиту до LLM.
+    # Результат відправляється фронтенду окремо від емоції асистента.
+    user_emotion_result = analyze_emotion(cleaned)
+    user_emotion_data = {
+        "emotion":     user_emotion_result.emotion,
+        "confidence":  round(user_emotion_result.confidence, 4),
+        "scores":      {k: round(v, 4) for k, v in user_emotion_result.scores.items()},
+        "method":      user_emotion_result.method,
+        "tokens":      user_emotion_result.tokens_matched[:10],  # топ-10 для дебагу
+    }
+
     await append_user_message(db, session_id, display_user)
     yield _sse_event({"type": "status", "phase": "thinking"})
+    # Одразу повідомляємо фронтенд про емоцію користувача (до відповіді LLM)
+    yield _sse_event({"type": "user_emotion", **user_emotion_data})
 
     context = await build_rag_context(db, cleaned)
     loop = asyncio.get_running_loop()
@@ -341,8 +357,9 @@ async def stream_chat_events(
                     "type": "done",
                     "response": parsed["response"],
                     "link": parsed["link"],
-                    "emotion": parsed["emotion"],
+                    "emotion": parsed["emotion"],           # емоція АСИСТЕНТА (від LLM)
                     "title": parsed["title"],
+                    "user_emotion": user_emotion_data,      # емоція КОРИСТУВАЧА (від EmotionEngine)
                 }
             )
             return
@@ -372,6 +389,10 @@ async def process_chat(
     display_user = cleaned_message
     if attachment_filename:
         display_user = f"{cleaned_message}\n\n📎 {attachment_filename}"
+
+    # NLP-аналіз емоції користувача (не-streaming шлях)
+    user_emotion_result = analyze_emotion(cleaned_message)
+
     context = await build_rag_context(db, cleaned_message)
     answer = await generate_model_answer(
         cleaned_message, context, attachment_block
@@ -387,6 +408,14 @@ async def process_chat(
         assistant_link=parsed["link"],
         assistant_title=parsed["title"],
     )
+
+    # Додаємо user_emotion до результату
+    parsed["user_emotion"] = {
+        "emotion":    user_emotion_result.emotion,
+        "confidence": round(user_emotion_result.confidence, 4),
+        "scores":     {k: round(v, 4) for k, v in user_emotion_result.scores.items()},
+        "method":     user_emotion_result.method,
+    }
 
     return parsed
 

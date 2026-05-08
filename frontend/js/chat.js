@@ -211,6 +211,68 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     const avatarVideo = document.getElementById("avatar-video");
     const emotionLabel = document.getElementById("emotion-status");
+
+    // ── Emotion Engine: мап емоцій → emoji + назва (синхронізовано з emotion_engine.py) ──
+    const EMOTION_META = {
+        happy:    { emoji: "😊", label: "радісно",    color: "#f5a623" },
+        sad:      { emoji: "😔", label: "сумно",      color: "#7b9dc8" },
+        surprise: { emoji: "😲", label: "здивовано",  color: "#a855f7" },
+        thinking: { emoji: "🤔", label: "задумливо",  color: "#10b981" },
+        neutral:  { emoji: "😐", label: "нейтрально", color: "#6b7280" },
+    };
+
+    // Порог впевненості для показу бейджу на повідомленні
+    const EMOTION_BADGE_THRESHOLD = 0.40;
+
+    // Поточний стан аватара (для плавних переходів між анімаціями)
+    let _currentAvatarEmotion = "neutral";
+
+    /**
+     * Плавна зміна анімації аватара з фейдом.
+     * Якщо нова емоція збігається з поточною → нічого не робимо (уникаємо дублювання).
+     */
+    function applyAvatarTransition(emotion, filename) {
+        if (!avatarVideo) return;
+        if (_currentAvatarEmotion === emotion) return;
+        const sourceEl = avatarVideo.querySelector("source");
+        if (!sourceEl) return;
+        if ((sourceEl.src || "").includes(filename)) return;
+
+        // Плавне згасання → зміна джерела → поява (transition smoothing)
+        avatarVideo.style.transition = "opacity 0.3s ease";
+        avatarVideo.style.opacity = "0";
+        setTimeout(() => {
+            sourceEl.src = `/avatar/animations/${filename}`;
+            avatarVideo.load();
+            avatarVideo.play().catch(() => {});
+            avatarVideo.style.opacity = "1";
+            _currentAvatarEmotion = emotion;
+        }, 300);
+    }
+
+    /**
+     * Відображає бейдж емоції над повідомленням користувача.
+     * Показується лише якщо emotion != neutral і confidence > порогу.
+     * Дані приходять від EmotionEngine (Python backend).
+     */
+    function createUserEmotionBadge(emotionData) {
+        if (!emotionData) return null;
+        const { emotion, confidence } = emotionData;
+        if (emotion === "neutral" || confidence < EMOTION_BADGE_THRESHOLD) return null;
+        const meta = EMOTION_META[emotion] || EMOTION_META.neutral;
+        const badge = document.createElement("div");
+        badge.className = "user-emotion-badge";
+        badge.setAttribute("title", `EmotionEngine: ${emotion} (впевненість ${Math.round(confidence * 100)}%)`);
+        badge.style.cssText = [
+            "display:inline-flex", "align-items:center", "gap:4px",
+            "font-size:11px", `color:${meta.color}`,
+            "opacity:0.75", "margin-bottom:2px",
+            "font-weight:500", "letter-spacing:0.02em",
+            "cursor:default",
+        ].join(";");
+        badge.innerHTML = `<span>${meta.emoji}</span><span>${meta.label}</span>`;
+        return badge;
+    }
     const newChatBtn = document.getElementById("new-chat-btn");
     const avatarBox = document.querySelector('.avatar-fixed');
     const resizeHandle = document.querySelector('.resize-handle');
@@ -229,34 +291,76 @@ window.addEventListener("DOMContentLoaded", async () => {
     window.addEventListener("resize", () => requestAnimationFrame(syncAvatarDefaultBottom));
     const confirmLogout = document.getElementById("confirmLogout");
 
+    /**
+     * Мап емоцій → відео-файли аватара.
+     * Синхронізовано з AvatarController.ANIMATION_MAP у emotion_engine.py.
+     * Fallback для відсутніх файлів: sad.mp4 → speak_blink.mp4
+     */
+    const AVATAR_VIDEO_MAP = {
+        neutral:  "speak_blink.mp4",
+        happy:    "happy.mp4",
+        sad:      "speak_blink.mp4",   // fallback: sad.mp4 відсутній
+        surprise: "surprize1.mp4",
+        thinking: "squinted1.mp4",
+        // emoji fallback (старий формат)
+        "😊": "happy.mp4",
+        "😄": "speak_blink.mp4",
+        "😲": "surprize1.mp4",
+        "🤔": "squinted1.mp4",
+        "😍": "happy.mp4",
+    };
+
+    /**
+     * Застосовує емоцію до аватара.
+     * Якщо event містить user_emotion (від EmotionEngine) — аватар реагує на емоцію КОРИСТУВАЧА.
+     * Якщо є тільки emotion (від LLM) — аватар відображає стан АСИСТЕНТА.
+     *
+     * Пріоритет: user_emotion (якщо confidence > 0.45) > assistant emotion
+     */
     function applyAvatarEmotion(data) {
         if (avatarBox) {
             avatarBox.classList.add("active-glow");
             setTimeout(() => avatarBox.classList.remove("active-glow"), 3000);
         }
-        if (data.emotion && avatarVideo) {
-            const videoMap = {
-                neutral: "speak_blink.mp4",
-                happy: "happy.mp4",
-                sad: "sad.mp4",
-                surprise: "surprize1.mp4",
-                thinking: "squinted1.mp4",
-                "😊": "happy.mp4",
-                "😄": "speak_blink.mp4",
-                "😲": "surprize1.mp4",
-                "🤔": "squinted1.mp4",
-                "😍": "happy.mp4",
-            };
-            const key = String(data.emotion).trim();
-            const filename =
-                videoMap[key] || videoMap[key.toLowerCase()] || "speak_blink.mp4";
-            const sourceElement = avatarVideo.querySelector("source");
-            if (sourceElement && !sourceElement.src.includes(filename)) {
-                sourceElement.src = `/avatar/animations/${filename}`;
-                avatarVideo.load();
-                avatarVideo.play().catch((e) => console.log("Помилка відео:", e));
-                if (emotionLabel) emotionLabel.textContent = data.emotion;
-            }
+
+        // Визначаємо, яку емоцію показати на аватарі
+        let displayEmotion = (data.emotion || "neutral").trim().toLowerCase();
+        let displayLabel = displayEmotion;
+
+        // Якщо є дані від EmotionEngine (user_emotion) — надаємо пріоритет
+        const ue = data.user_emotion;
+        if (ue && ue.emotion && ue.emotion !== "neutral" && ue.confidence >= 0.45) {
+            displayEmotion = ue.emotion;
+            const meta = EMOTION_META[ue.emotion];
+            displayLabel = meta ? `${meta.emoji} ${meta.label}` : ue.emotion;
+        } else {
+            // Якщо user_emotion нейтральна — показуємо емоцію асистента
+            const key = AVATAR_VIDEO_MAP[displayEmotion] ? displayEmotion : "neutral";
+            displayEmotion = key;
+        }
+
+        const filename = AVATAR_VIDEO_MAP[displayEmotion] || "speak_blink.mp4";
+
+        // Плавний перехід (через applyAvatarTransition)
+        if (avatarVideo) {
+            applyAvatarTransition(displayEmotion, filename);
+        }
+
+        if (emotionLabel) emotionLabel.textContent = displayLabel;
+    }
+
+    /**
+     * Обробляє SSE-подію user_emotion (приходить одразу після status:thinking).
+     * Показує «живу» реакцію аватара ще до відповіді LLM.
+     */
+    function handleUserEmotionEvent(data) {
+        if (!data || !data.emotion) return;
+        if (data.emotion === "neutral" || (data.confidence || 0) < 0.45) return;
+        const filename = AVATAR_VIDEO_MAP[data.emotion] || "speak_blink.mp4";
+        applyAvatarTransition(data.emotion, filename);
+        if (emotionLabel) {
+            const meta = EMOTION_META[data.emotion];
+            emotionLabel.textContent = meta ? `${meta.emoji} ${meta.label}` : data.emotion;
         }
     }
 
@@ -487,11 +591,16 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
 
     // Користувач — лише текст; бот — Markdown (історія / привітання / помилки).
-    function appendMessage(role, text) {
+    function appendMessage(role, text, emotionData) {
         const msgDiv = document.createElement("div");
         msgDiv.className = `message ${role === "user" ? "user" : "bot"}`;
         if (role === "user") {
-            msgDiv.textContent = text;
+            // Бейдж емоції (якщо є дані від EmotionEngine)
+            const badge = createUserEmotionBadge(emotionData);
+            if (badge) msgDiv.appendChild(badge);
+            const textEl = document.createElement("div");
+            textEl.textContent = text;
+            msgDiv.appendChild(textEl);
         } else {
             const inner = document.createElement("div");
             inner.className = "markdown-body bot-message-body";
@@ -914,8 +1023,11 @@ window.addEventListener("DOMContentLoaded", async () => {
             ? `${textForApi}\n\n📎 ${fileToSend.name}`
             : textRaw;
 
+        // emotionData буде додано після отримання user_emotion event
+        let _pendingUserEmotionData = null;
         flushStreamingMathTimer();
-        appendMessage("user", userBubble);
+        // Тимчасово додаємо повідомлення без бейджу (оновимо після user_emotion)
+        appendMessage("user", userBubble, null);
         userInput.value = "";
         pendingFile = null;
         syncAttachButton();
@@ -1004,6 +1116,19 @@ window.addEventListener("DOMContentLoaded", async () => {
             await consumeSseStream(res, (ev) => {
                 if (ev.type === "status" && ev.phase === "thinking") {
                     if (emotionLabel) emotionLabel.textContent = "думає…";
+                    return;
+                }
+                // user_emotion — реакція аватара ще до відповіді LLM (від EmotionEngine)
+                if (ev.type === "user_emotion") {
+                    _pendingUserEmotionData = ev;
+                    handleUserEmotionEvent(ev);
+                    // Додаємо бейдж до останнього повідомлення користувача
+                    const userMsgs = messagesContainer.querySelectorAll(".message.user");
+                    const lastUserMsg = userMsgs[userMsgs.length - 1];
+                    if (lastUserMsg && !lastUserMsg.querySelector(".user-emotion-badge")) {
+                        const badge = createUserEmotionBadge(ev);
+                        if (badge) lastUserMsg.insertBefore(badge, lastUserMsg.firstChild);
+                    }
                     return;
                 }
                 if (ev.type === "delta" && ev.content) {
