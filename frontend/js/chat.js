@@ -238,6 +238,33 @@ window.addEventListener("DOMContentLoaded", async () => {
     /** Той самий поріг для аватару за емоцією користувача (інакше бейдж є, а кліп лишається старим). */
     const USER_EMOTION_AVATAR_THRESHOLD = EMOTION_BADGE_THRESHOLD;
 
+    /**
+     * Оновлює лейбл "Стан" під аватаром.
+     * Якщо передано `scores` — показує топ-2 емоції з відсотками та кольором.
+     * Якщо scores відсутні — показує одну емоцію з кольором і впевненістю.
+     *
+     * @param {string} primaryEmotion  — основна емоція (ключ з EMOTION_META)
+     * @param {Object|null} scores     — розподіл {emotion: probability, ...} або null
+     * @param {number|null} confidence — впевненість [0..1] або null
+     */
+    function renderEmotionLabel(primaryEmotion, scores, confidence) {
+        if (!emotionLabel) return;
+        emotionLabel.dataset.state = "active";
+
+        // Топ-1 емоція з відсотком (один компактний рядок)
+        const top = scores && typeof scores === "object"
+            ? Object.entries(scores).sort(([, a], [, b]) => b - a)[0]
+            : null;
+        const emoKey = top ? top[0] : primaryEmotion;
+        const m = EMOTION_META[emoKey] || EMOTION_META.neutral;
+        const pct = top
+            ? Math.round(top[1] * 100)
+            : (confidence != null ? Math.round(confidence * 100) : null);
+        const pctStr = pct != null ? `&nbsp;<small style="opacity:.65;font-variant-numeric:tabular-nums">${pct}%</small>` : "";
+        emotionLabel.innerHTML =
+            `<span style="color:${m.color};font-weight:600">${m.emoji}&nbsp;${m.label}${pctStr}</span>`;
+    }
+
     /** Останній .mp4; ініціалізуємо з DOM, щоб перший перехід не «зіпсувати» порівняння. */
     function initialChatAvatarFilename() {
         const el =
@@ -492,6 +519,90 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     /**
+     * Будує змішаний плейліст з топ-2 емоцій на основі розподілу scores.
+     * Основна емоція отримує 2 кліпи, вторинна (якщо score > 0.14) — 1 кліп.
+     * Повертає { primaryKey, playlist }.
+     *
+     * @param {Object} scores       — розподіл ймовірностей {emotion: float}
+     * @param {string|null} hintFilename — кліп від бекенду (пріоритет у основній емоції)
+     */
+    function buildMultiEmotionPlaylist(scores, hintFilename) {
+        const SECONDARY_THRESHOLD = 0.14;
+
+        // Топ-2 емоції з пулами
+        const candidates = Object.entries(scores || {})
+            .filter(([emo, v]) => v > SECONDARY_THRESHOLD && AVATAR_ROTATION_POOLS[emo])
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 2);
+
+        if (candidates.length === 0) {
+            return { primaryKey: "neutral", playlist: ["muse.mp4"] };
+        }
+
+        const [[primaryKey, primaryScore], secondary] = [candidates[0], candidates[1]];
+        const primaryPool = AVATAR_ROTATION_POOLS[primaryKey] || ["muse.mp4"];
+
+        // Визначаємо старт у основному пулі (підказка від бекенду)
+        let start = 0;
+        if (hintFilename && primaryPool.includes(hintFilename)) {
+            start = primaryPool.indexOf(hintFilename);
+        }
+
+        // Кількість кліпів основної емоції: 1 якщо домінує і є вторинна, інакше 2
+        const primaryCount = secondary && primaryScore < 0.72 ? 2 : Math.min(2, primaryPool.length);
+        const playlist = [];
+        for (let i = 0; i < primaryCount; i++) {
+            playlist.push(primaryPool[(start + i) % primaryPool.length]);
+        }
+
+        // Додаємо 1 кліп вторинної емоції якщо вона достатньо значуща
+        if (secondary) {
+            const [secKey, secScore] = secondary;
+            if (secScore > SECONDARY_THRESHOLD) {
+                const secPool = AVATAR_ROTATION_POOLS[secKey] || [];
+                if (secPool.length > 0) playlist.push(secPool[0]);
+            }
+        }
+
+        return { primaryKey, playlist };
+    }
+
+    /**
+     * Запускає цикл ротації кліпів змішаного плейліста (топ-2 емоції).
+     * Використовується коли є повний розподіл scores від EmotionEngine.
+     *
+     * @param {Object} scores       — розподіл ймовірностей {emotion: float}
+     * @param {string|null} hintFilename — кліп від бекенду
+     */
+    function startMultiEmotionRotation(scores, hintFilename = null) {
+        if (!avatarLayerA || !avatarLayerB) return;
+        clearAvatarRotation();
+        const token = avatarRotationGeneration;
+        const { primaryKey, playlist } = buildMultiEmotionPlaylist(scores, hintFilename);
+        if (!playlist.length) return;
+
+        let i = 0;
+        function step() {
+            if (token !== avatarRotationGeneration) return;
+            const fn = playlist[i % playlist.length];
+            // Емоція для кліпу: визначаємо з якого пулу він походить
+            const clipKey = Object.entries(AVATAR_ROTATION_POOLS).find(
+                ([, pool]) => pool.includes(fn)
+            )?.[0] || primaryKey;
+            applyAvatarTransition(clipKey, fn, {
+                fade: false,
+                playThroughOnce: true,
+                onEnded: () => {
+                    if (token !== avatarRotationGeneration) return;
+                    i = (i + 1) % playlist.length;
+                    step();
+                },
+            });
+        }
+        step();
+    }
+
+    /**
      * Під час генерації — цикл з 1–3 кліпів; кожен кліп відтворюється повністю (ended), не обрізається таймером.
      * hintFilename: якщо є (з бекенду), входить у плейлист із відповідного місця в пулі.
      */
@@ -544,7 +655,6 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         // Визначаємо, яку емоцію показати на аватарі
         let displayEmotion = (data.emotion || "neutral").trim().toLowerCase();
-        let displayLabel = displayEmotion;
 
         const ue = data.user_emotion;
         const conf = (x) => Number(x) || 0;
@@ -562,22 +672,26 @@ window.addEventListener("DOMContentLoaded", async () => {
             conf(sticky.confidence) >= threshold;
 
         let filename;
+        let labelEmotion, labelScores, labelConf;
+
         if (ueStrong) {
             displayEmotion = ue.emotion;
-            const meta = EMOTION_META[ue.emotion];
-            displayLabel = meta ? `${meta.emoji} ${meta.label}` : ue.emotion;
             filename =
                 ue.avatar_filename ||
                 AVATAR_VIDEO_MAP[displayEmotion] ||
                 "muse.mp4";
+            labelEmotion = ue.emotion;
+            labelScores   = ue.scores || null;
+            labelConf     = conf(ue.confidence);
         } else if (stickyStrong) {
             displayEmotion = sticky.emotion;
-            const meta = EMOTION_META[sticky.emotion];
-            displayLabel = meta ? `${meta.emoji} ${meta.label}` : sticky.emotion;
             filename =
                 sticky.avatar_filename ||
                 AVATAR_VIDEO_MAP[displayEmotion] ||
                 "muse.mp4";
+            labelEmotion = sticky.emotion;
+            labelScores   = sticky.scores || null;
+            labelConf     = conf(sticky.confidence);
         } else {
             const rawKey = AVATAR_VIDEO_MAP[displayEmotion] ? displayEmotion : "neutral";
             displayEmotion = rawKey;
@@ -585,14 +699,23 @@ window.addEventListener("DOMContentLoaded", async () => {
                 data.avatar_filename ||
                 AVATAR_VIDEO_MAP[displayEmotion] ||
                 "muse.mp4";
+            labelEmotion = displayEmotion;
+            labelScores   = null;   // від LLM scores немає
+            labelConf     = null;
         }
 
-        // Плавний перехід (через applyAvatarTransition)
+        // Плавний перехід або мікс-ротація (через applyAvatarTransition / startMultiEmotionRotation)
         if (avatarLayerA && avatarLayerB) {
-            applyAvatarTransition(displayEmotion, filename);
+            if (labelScores && Object.keys(labelScores).length > 0) {
+                // Є повний розподіл — запускаємо мультиемоційну ротацію
+                startMultiEmotionRotation(labelScores, filename);
+            } else {
+                // Лише одна емоція від LLM — простий перехід
+                applyAvatarTransition(displayEmotion, filename);
+            }
         }
 
-        if (emotionLabel) emotionLabel.textContent = displayLabel;
+        renderEmotionLabel(labelEmotion, labelScores, labelConf);
     }
 
     /**
@@ -612,12 +735,15 @@ window.addEventListener("DOMContentLoaded", async () => {
             emotion: data.emotion,
             confidence: c,
             avatar_filename: filename,
+            scores: data.scores || null,    // зберігаємо для topN-лейблу
         };
-        startAvatarRotation(data.emotion, filename);
-        if (emotionLabel) {
-            const meta = EMOTION_META[data.emotion];
-            emotionLabel.textContent = meta ? `${meta.emoji} ${meta.label}` : data.emotion;
+        // Якщо є повний розподіл — мікшуємо кліпи з топ-2 емоцій
+        if (data.scores && Object.keys(data.scores).length > 0) {
+            startMultiEmotionRotation(data.scores, filename);
+        } else {
+            startAvatarRotation(data.emotion, filename);
         }
+        renderEmotionLabel(data.emotion, data.scores || null, c);
     }
 
     function createThinkingBubble() {
@@ -851,9 +977,6 @@ window.addEventListener("DOMContentLoaded", async () => {
         const msgDiv = document.createElement("div");
         msgDiv.className = `message ${role === "user" ? "user" : "bot"}`;
         if (role === "user") {
-            // Бейдж емоції (якщо є дані від EmotionEngine)
-            const badge = createUserEmotionBadge(emotionData);
-            if (badge) msgDiv.appendChild(badge);
             const textEl = document.createElement("div");
             textEl.textContent = text;
             msgDiv.appendChild(textEl);
@@ -1376,8 +1499,9 @@ window.addEventListener("DOMContentLoaded", async () => {
                 if (ev.type === "status" && ev.phase === "thinking") {
                     if (emotionLabel) {
                         const tm = EMOTION_META.thinking;
-                        emotionLabel.textContent = tm
-                            ? `${tm.emoji} ${tm.label}`
+                        emotionLabel.dataset.state = "thinking";
+                        emotionLabel.innerHTML = tm
+                            ? `<span style="color:${tm.color};font-weight:600">${tm.emoji}&nbsp;${tm.label}…</span>`
                             : "думає…";
                     }
                     scheduleThinkingAvatarRotation();
@@ -1387,13 +1511,6 @@ window.addEventListener("DOMContentLoaded", async () => {
                 if (ev.type === "user_emotion") {
                     _pendingUserEmotionData = ev;
                     handleUserEmotionEvent(ev);
-                    // Додаємо бейдж до останнього повідомлення користувача
-                    const userMsgs = messagesContainer.querySelectorAll(".message.user");
-                    const lastUserMsg = userMsgs[userMsgs.length - 1];
-                    if (lastUserMsg && !lastUserMsg.querySelector(".user-emotion-badge")) {
-                        const badge = createUserEmotionBadge(ev);
-                        if (badge) lastUserMsg.insertBefore(badge, lastUserMsg.firstChild);
-                    }
                     return;
                 }
                 if (ev.type === "delta" && ev.content) {
@@ -1462,14 +1579,9 @@ window.addEventListener("DOMContentLoaded", async () => {
             if (attachBtn) attachBtn.disabled = false;
             if (voiceBtn) voiceBtn.disabled = false;
             if (userInput) userInput.disabled = false;
-            if (emotionLabel) {
-                const tl = emotionLabel.textContent.trim();
-                const thinkingLbl = EMOTION_META.thinking
-                    ? `${EMOTION_META.thinking.emoji} ${EMOTION_META.thinking.label}`
-                    : "думає…";
-                if (tl === "думає…" || tl === thinkingLbl) {
-                    emotionLabel.textContent = "Очікування";
-                }
+            if (emotionLabel && emotionLabel.dataset.state === "thinking") {
+                emotionLabel.dataset.state = "idle";
+                emotionLabel.innerHTML = "Очікування";
             }
             requestAnimationFrame(() => syncAvatarDefaultBottom());
         }
