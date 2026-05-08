@@ -209,7 +209,16 @@ window.addEventListener("DOMContentLoaded", async () => {
             sendBtn.setAttribute("aria-label", "Надіслати повідомлення");
         }
     }
-    const avatarVideo = document.getElementById("avatar-video");
+    const avatarVideoStack = document.getElementById("avatar-video-stack");
+    const avatarLayerA = document.getElementById("avatar-video-a");
+    const avatarLayerB = document.getElementById("avatar-video-b");
+    /** Активний (видимий) плеєр після двошарового перемикання. */
+    let _activeAvatarLayer =
+        avatarLayerA && avatarLayerB ? avatarLayerA : null;
+
+    /** Покоління перемикань — щоб повільний load не затер новіший запит. */
+    let _avatarSwapGen = 0;
+
     const emotionLabel = document.getElementById("emotion-status");
 
     // ── Emotion Engine: мап емоцій → emoji + назва (синхронізовано з emotion_engine.py) ──
@@ -231,7 +240,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     /** Останній .mp4; ініціалізуємо з DOM, щоб перший перехід не «зіпсувати» порівняння. */
     function initialChatAvatarFilename() {
-        if (!avatarVideo) return "";
+        const el =
+            (_activeAvatarLayer && _activeAvatarLayer.isConnected
+                ? _activeAvatarLayer
+                : avatarLayerA) || null;
+        if (!el) return "";
         const fromUrl = (u) => {
             if (!u) return "";
             try {
@@ -242,43 +255,90 @@ window.addEventListener("DOMContentLoaded", async () => {
                 return "";
             }
         };
-        let name = fromUrl(avatarVideo.currentSrc) || fromUrl(avatarVideo.src);
-        if (!name) {
-            const s = avatarVideo.querySelector("source");
-            name = fromUrl(s ? s.src : "");
-        }
+        let name = fromUrl(el.currentSrc) || fromUrl(el.src);
         return name || "muse.mp4";
     }
 
     let _lastAvatarFilename = initialChatAvatarFilename();
 
     /**
-     * Плавна зміна анімації аватара з фейдом.
-     * Джерело вішаємо на сам <video> (src) — лише зміна дочірнього <source> у частини браузерів не перемикає декодер.
-     * Якщо файл той самий — перезапуск з початку.
+     * Перший з loadeddata / canplay (кеш браузера інколи пропускає один із них).
      */
-    function applyAvatarTransition(emotion, filename) {
-        if (!avatarVideo || !filename) return;
+    function whenClipReady(videoEl, genSnapshot, then) {
+        let finished = false;
+        const run = () => {
+            videoEl.removeEventListener("loadeddata", run);
+            videoEl.removeEventListener("canplay", run);
+            if (finished || genSnapshot !== _avatarSwapGen) return;
+            finished = true;
+            then();
+        };
+        videoEl.addEventListener("loadeddata", run);
+        videoEl.addEventListener("canplay", run);
+    }
+
+    /**
+     * Два <video>: новий кліп декодується на прихованому шарі, потім лише клас is-active (+ opacity).
+     * Сторінка / картка не «перезавантажуються»; немає глухого кадру одного плеєра перед play.
+     * @param {Object} [opts]
+     * @param {boolean} [opts.fade=true] — короткий crossfade між шарами; false — без transition для ротації.
+     */
+    function applyAvatarTransition(emotion, filename, opts = {}) {
+        const fade = opts.fade !== false;
+        if (
+            !avatarVideoStack ||
+            !avatarLayerA ||
+            !avatarLayerB ||
+            !_activeAvatarLayer ||
+            !filename
+        ) {
+            return;
+        }
+
+        const active = _activeAvatarLayer;
+        const idle = active === avatarLayerA ? avatarLayerB : avatarLayerA;
+
         if (_lastAvatarFilename === filename) {
             try {
-                avatarVideo.currentTime = 0;
-                avatarVideo.play().catch(() => {});
+                active.currentTime = 0;
+                active.play().catch(() => {});
             } catch (_) {}
             return;
         }
 
-        avatarVideo.style.transition = "opacity 0.3s ease";
-        avatarVideo.style.opacity = "0";
         const path = `/avatar/animations/${filename}`;
-        setTimeout(() => {
-            avatarVideo.pause();
-            avatarVideo.querySelectorAll("source").forEach((el) => el.remove());
-            avatarVideo.src = path;
-            avatarVideo.load();
-            avatarVideo.play().catch(() => {});
-            avatarVideo.style.opacity = "1";
+        const gen = ++_avatarSwapGen;
+
+        const finalize = () => {
+            if (gen !== _avatarSwapGen) return;
+            idle.currentTime = 0;
+            active.classList.remove("is-active");
+            active.pause();
+            idle.classList.add("is-active");
+            idle.play().catch(() => {});
+            _activeAvatarLayer = idle;
             _lastAvatarFilename = filename;
-        }, 300);
+        };
+
+        if (!fade) {
+            whenClipReady(idle, gen, () => {
+                if (gen !== _avatarSwapGen) return;
+                avatarVideoStack.classList.add("avatar-swap-instant");
+                finalize();
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() =>
+                        avatarVideoStack.classList.remove("avatar-swap-instant")
+                    );
+                });
+            });
+            idle.src = path;
+            idle.load();
+            return;
+        }
+
+        whenClipReady(idle, gen, finalize);
+        idle.src = path;
+        idle.load();
     }
 
     /**
@@ -373,7 +433,7 @@ window.addEventListener("DOMContentLoaded", async () => {
      * hintFilename: якщо є (з бекенду), першим показуємо його або стартуємо з нього в циклі.
      */
     function startAvatarRotation(emotionKey, hintFilename = null) {
-        if (!avatarVideo) return;
+        if (!avatarLayerA || !avatarLayerB) return;
         clearAvatarRotation();
         const key =
             AVATAR_ROTATION_POOLS[emotionKey] !== undefined
@@ -394,7 +454,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         function step() {
             const fn = pool[idx % pool.length];
             idx = (idx + 1) % pool.length;
-            applyAvatarTransition(key, fn);
+            applyAvatarTransition(key, fn, { fade: false });
         }
         step();
         avatarRotationTimerId = setInterval(step, AVATAR_ROTATION_INTERVAL_MS);
@@ -439,7 +499,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
 
         // Плавний перехід (через applyAvatarTransition)
-        if (avatarVideo) {
+        if (avatarLayerA && avatarLayerB) {
             applyAvatarTransition(displayEmotion, filename);
         }
 
