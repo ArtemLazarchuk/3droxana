@@ -12,6 +12,7 @@ logging.basicConfig(
     format="%(levelname)s %(name)s: %(message)s",
 )
 
+from backend.api import routes_emotion
 from backend.api import routes_faq
 from backend.api import routes_feedback
 from backend.api import routes_links
@@ -66,6 +67,16 @@ async def serve_faq():
 async def serve_faq():
     return FileResponse(os.path.join("frontend", "pages", "sites.html"), headers=_NO_STORE_HTML)
 
+
+@app.get("/emotion-demo", response_class=FileResponse)
+async def serve_emotion_demo():
+    """Демо-сторінка модуля аналізу емоцій (для захисту диплому)."""
+    return FileResponse(
+        os.path.join("frontend", "pages", "emotion-demo.html"),
+        headers=_NO_STORE_HTML,
+    )
+
+app.include_router(routes_emotion.router)
 app.include_router(routes_faq.router)
 app.include_router(routes_feedback.router)
 app.include_router(routes_links.router)

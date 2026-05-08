@@ -121,3 +121,7 @@ yarn-error.log*
 *.swo
 *.bak
 *.tmp
+
+# Trained ML emotion models (відтворюються через scripts/train_emotion_model.py)
+models/
+*.joblib
