@@ -71,11 +71,20 @@ TOGETHER_API_KEY="ваш-ключ-Together"
 
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
+PUBLIC_APP_BASE_URL="http://127.0.0.1:6060"
+MAIL_USERNAME=""
+MAIL_PASSWORD=""
+MAIL_FROM=""
 ```
 
 - `MONGODB_URI` — повний URI до вашого MongoDB/Atlas‑кластера.
 - `DATABASE_NAME` — назва бази, за замовчуванням використовується `3davatar`.
 - `TOGETHER_API_KEY` — API‑ключ від Together (для LLM‑моделі).
+- `PUBLIC_APP_BASE_URL` — базова URL застосунку без завершального слеша (наприклад `https://your-domain.com` на сервері).
+- `MAIL_USERNAME`, `MAIL_PASSWORD` — облікові дані SMTP; без них функції надсилання пошти не працюватимуть.
+- `MAIL_FROM` — адреса «Від кого» у листах; якщо порожньо, зазвичай використовується `MAIL_USERNAME`.
+
+Опційно для пошти (якщо не Gmail): у `backend/config.py` також читаються `MAIL_SERVER` (за замовчуванням `smtp.gmail.com`) та `MAIL_PORT` (`587`).
 
 ### 6. Запустити сервер
 
@@ -135,6 +144,10 @@ docker run -p 6060:6060 \
   -e JWT_SECRET_KEY="випадковий-рядок" \
   -e GOOGLE_CLIENT_ID="" \
   -e GOOGLE_CLIENT_SECRET="" \
+  -e PUBLIC_APP_BASE_URL="https://example.com" \
+  -e MAIL_USERNAME="" \
+  -e MAIL_PASSWORD="" \
+  -e MAIL_FROM="" \
   3droxana
 ```
 
