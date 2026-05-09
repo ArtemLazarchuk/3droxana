@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 from together import Together
 
 from assistant_core.link_indexing import build_rag_context
+from assistant_core.emotion_engine import (
+    analyze_emotion,
+    get_avatar_controller,
+    reset_session_context,
+    select_animation_for_emotion_label,
+)
 
 
 class ChatSessionNotFound(Exception):
@@ -34,7 +40,7 @@ client = Together(api_key=TOGETHER_API_KEY)
 
 # Мітки емоцій для аватара (англ.); збігайте з `videoMap` у frontend/js/chat.js
 ALLOWED_EMOTIONS: FrozenSet[str] = frozenset(
-    {"neutral", "happy", "sad", "surprise", "thinking"}
+    {"neutral", "happy", "sad", "surprise", "thinking", "angry", "disgust"}
 )
 
 # Назва сесії в списку «Історія»; поки лишається так — підставляємо тему з першої відповіді моделі.
@@ -66,8 +72,9 @@ SYSTEM_PROMPT = (
     "Без сирого URL у тексті (URL лише в полі «посилання»). Без емодзі, якщо не виняток вище.}\n"
     "текст чату: {короткий нейтральний заголовок теми, як назва розділу. "
     "НЕ питання. Наприклад: «Оцінювання в КПІ», «Стипендії та бал», «Важливо для першокурсників».}\n"
-    "емоція: {СТРОГО одне англійське слово: neutral, happy, sad, surprise, thinking. "
-    "neutral — спокійно; happy — радісно; sad — шкода; surprise — здивування; thinking — роздуми. Лише слово.}\n"
+    "емоція: {СТРОГО одне англійське слово: neutral, happy, sad, surprise, thinking, angry, disgust. "
+    "neutral — спокійно; happy — радісно; sad — шкода; surprise — здивування; thinking — роздуми; "
+    "angry — роздратування; disgust — огида. Лише слово.}\n"
     "посилання: {повний URL з контексту, якщо доречно; інакше рівно: немає}\n"
     "Не додавай нічого за межами цього шаблону. НЕ змінюй назви полів і порядок полів."
 )
@@ -133,6 +140,9 @@ def _normalize_emotion(raw: str) -> str:
         "😲": "surprise",
         "🤔": "thinking",
         "😍": "happy",
+        "😠": "angry",
+        "🤢": "disgust",
+        "😤": "angry",
     }
     return emoji_map.get(raw.strip(), "neutral")
 
@@ -308,8 +318,26 @@ async def stream_chat_events(
     display_user = cleaned
     if attachment_filename:
         display_user = f"{cleaned}\n\n📎 {attachment_filename}"
+
+    # ── Аналіз емоції КОРИСТУВАЧА через EmotionEngine ──────────────────────
+    # Це незалежний NLP-аналіз тексту до запиту до LLM.
+    # Результат відправляється фронтенду окремо від емоції асистента.
+    user_emotion_result = analyze_emotion(cleaned)
+    user_emotion_data = {
+        "emotion":     user_emotion_result.emotion,
+        "confidence":  round(user_emotion_result.confidence, 4),
+        "scores":      {k: round(v, 4) for k, v in user_emotion_result.scores.items()},
+        "method":      user_emotion_result.method,
+        "tokens":      user_emotion_result.tokens_matched[:10],  # топ-10 для дебагу
+        "avatar_filename": get_avatar_controller().select_animation(
+            user_emotion_result
+        ).filename,
+    }
+
     await append_user_message(db, session_id, display_user)
     yield _sse_event({"type": "status", "phase": "thinking"})
+    # Одразу повідомляємо фронтенд про емоцію користувача (до відповіді LLM)
+    yield _sse_event({"type": "user_emotion", **user_emotion_data})
 
     context = await build_rag_context(db, cleaned)
     loop = asyncio.get_running_loop()
@@ -341,8 +369,12 @@ async def stream_chat_events(
                     "type": "done",
                     "response": parsed["response"],
                     "link": parsed["link"],
-                    "emotion": parsed["emotion"],
+                    "emotion": parsed["emotion"],           # емоція АСИСТЕНТА (від LLM)
                     "title": parsed["title"],
+                    "user_emotion": user_emotion_data,      # емоція КОРИСТУВАЧА (від EmotionEngine)
+                    "avatar_filename": select_animation_for_emotion_label(
+                        parsed["emotion"]
+                    ).filename,
                 }
             )
             return
@@ -372,6 +404,10 @@ async def process_chat(
     display_user = cleaned_message
     if attachment_filename:
         display_user = f"{cleaned_message}\n\n📎 {attachment_filename}"
+
+    # NLP-аналіз емоції користувача (не-streaming шлях)
+    user_emotion_result = analyze_emotion(cleaned_message)
+
     context = await build_rag_context(db, cleaned_message)
     answer = await generate_model_answer(
         cleaned_message, context, attachment_block
@@ -387,6 +423,17 @@ async def process_chat(
         assistant_link=parsed["link"],
         assistant_title=parsed["title"],
     )
+
+    # Додаємо user_emotion до результату
+    parsed["user_emotion"] = {
+        "emotion":    user_emotion_result.emotion,
+        "confidence": round(user_emotion_result.confidence, 4),
+        "scores":     {k: round(v, 4) for k, v in user_emotion_result.scores.items()},
+        "method":     user_emotion_result.method,
+        "avatar_filename": get_avatar_controller().select_animation(
+            user_emotion_result
+        ).filename,
+    }
 
     return parsed
 

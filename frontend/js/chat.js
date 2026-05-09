@@ -209,8 +209,202 @@ window.addEventListener("DOMContentLoaded", async () => {
             sendBtn.setAttribute("aria-label", "Надіслати повідомлення");
         }
     }
-    const avatarVideo = document.getElementById("avatar-video");
+    const avatarVideoStack = document.getElementById("avatar-video-stack");
+    const avatarLayerA = document.getElementById("avatar-video-a");
+    const avatarLayerB = document.getElementById("avatar-video-b");
+    /** Активний (видимий) плеєр після двошарового перемикання. */
+    let _activeAvatarLayer =
+        avatarLayerA && avatarLayerB ? avatarLayerA : null;
+
+    /** Покоління перемикань — щоб повільний load не затер новіший запит. */
+    let _avatarSwapGen = 0;
+
     const emotionLabel = document.getElementById("emotion-status");
+
+    // ── Emotion Engine: мап емоцій → emoji + назва (синхронізовано з emotion_engine.py) ──
+    const EMOTION_META = {
+        happy:    { emoji: "😊", label: "радісно",    color: "#f5a623" },
+        sad:      { emoji: "😔", label: "сумно",      color: "#7b9dc8" },
+        surprise: { emoji: "😲", label: "здивовано",  color: "#a855f7" },
+        thinking: { emoji: "🤔", label: "задумливо", color: "#10b981" },
+        neutral:  { emoji: "😐", label: "нейтрально", color: "#6b7280" },
+        angry:    { emoji: "😠", label: "злісно",     color: "#ef4444" },
+        disgust:  { emoji: "🤢", label: "огида",      color: "#84cc16" },
+    };
+
+    // Порог впевненості для показу бейджу на повідомленні
+    const EMOTION_BADGE_THRESHOLD = 0.40;
+
+    /** Той самий поріг для аватару за емоцією користувача (інакше бейдж є, а кліп лишається старим). */
+    const USER_EMOTION_AVATAR_THRESHOLD = EMOTION_BADGE_THRESHOLD;
+
+    /**
+     * Оновлює лейбл "Стан" під аватаром.
+     * Якщо передано `scores` — показує топ-2 емоції з відсотками та кольором.
+     * Якщо scores відсутні — показує одну емоцію з кольором і впевненістю.
+     *
+     * @param {string} primaryEmotion  — основна емоція (ключ з EMOTION_META)
+     * @param {Object|null} scores     — розподіл {emotion: probability, ...} або null
+     * @param {number|null} confidence — впевненість [0..1] або null
+     */
+    function renderEmotionLabel(primaryEmotion, scores, confidence) {
+        if (!emotionLabel) return;
+        emotionLabel.dataset.state = "active";
+
+        // Топ-1 емоція з відсотком (один компактний рядок)
+        const top = scores && typeof scores === "object"
+            ? Object.entries(scores).sort(([, a], [, b]) => b - a)[0]
+            : null;
+        const emoKey = top ? top[0] : primaryEmotion;
+        const m = EMOTION_META[emoKey] || EMOTION_META.neutral;
+        const pct = top
+            ? Math.round(top[1] * 100)
+            : (confidence != null ? Math.round(confidence * 100) : null);
+        const pctStr = pct != null ? `&nbsp;<small style="opacity:.65;font-variant-numeric:tabular-nums">${pct}%</small>` : "";
+        emotionLabel.innerHTML =
+            `<span style="color:${m.color};font-weight:600">${m.emoji}&nbsp;${m.label}${pctStr}</span>`;
+    }
+
+    /** Останній .mp4; ініціалізуємо з DOM, щоб перший перехід не «зіпсувати» порівняння. */
+    function initialChatAvatarFilename() {
+        const el =
+            (_activeAvatarLayer && _activeAvatarLayer.isConnected
+                ? _activeAvatarLayer
+                : avatarLayerA) || null;
+        if (!el) return "";
+        const fromUrl = (u) => {
+            if (!u) return "";
+            try {
+                const path = decodeURIComponent(new URL(u, window.location.href).pathname);
+                const seg = path.split("/").filter(Boolean).pop();
+                return seg || "";
+            } catch (_) {
+                return "";
+            }
+        };
+        let name = fromUrl(el.currentSrc) || fromUrl(el.src);
+        return name || "muse.mp4";
+    }
+
+    let _lastAvatarFilename = initialChatAvatarFilename();
+
+    /**
+     * Перший з loadeddata / canplay (кеш браузера інколи пропускає один із них).
+     */
+    function whenClipReady(videoEl, genSnapshot, then) {
+        let finished = false;
+        const run = () => {
+            videoEl.removeEventListener("loadeddata", run);
+            videoEl.removeEventListener("canplay", run);
+            if (finished || genSnapshot !== _avatarSwapGen) return;
+            finished = true;
+            then();
+        };
+        videoEl.addEventListener("loadeddata", run);
+        videoEl.addEventListener("canplay", run);
+    }
+
+    /**
+     * Два <video>: новий кліп декодується на прихованому шарі, потім лише клас is-active (+ opacity).
+     * Сторінка / картка не «перезавантажуються»; немає глухого кадру одного плеєра перед play.
+     * @param {Object} [opts]
+     * @param {boolean} [opts.fade=true] — короткий crossfade між шарами; false — без transition для ротації.
+     * @param {boolean} [opts.playThroughOnce=false] — один повний прохід без loop (для ротації по «ended»).
+     * @param {function} [opts.onEnded] — після playThroughOnce, коли кліп відіграв до кінця.
+     */
+    function applyAvatarTransition(emotion, filename, opts = {}) {
+        const fade = opts.fade !== false;
+        const playThroughOnce = opts.playThroughOnce === true;
+        const onEnded = opts.onEnded;
+        if (
+            !avatarVideoStack ||
+            !avatarLayerA ||
+            !avatarLayerB ||
+            !_activeAvatarLayer ||
+            !filename
+        ) {
+            return;
+        }
+
+        const active = _activeAvatarLayer;
+        const idle = active === avatarLayerA ? avatarLayerB : avatarLayerA;
+
+        if (_lastAvatarFilename === filename && !playThroughOnce) {
+            try {
+                active.loop = true;
+                active.currentTime = 0;
+                active.play().catch(() => {});
+            } catch (_) {}
+            return;
+        }
+
+        const path = `/avatar/animations/${filename}`;
+        const gen = ++_avatarSwapGen;
+
+        const finalize = () => {
+            if (gen !== _avatarSwapGen) return;
+            idle.currentTime = 0;
+            active.classList.remove("is-active");
+            active.pause();
+            idle.classList.add("is-active");
+            idle.loop = !playThroughOnce;
+            idle.play().catch(() => {});
+            if (playThroughOnce && typeof onEnded === "function") {
+                const once = () => {
+                    idle.removeEventListener("ended", once);
+                    if (gen !== _avatarSwapGen) return;
+                    onEnded();
+                };
+                idle.addEventListener("ended", once);
+            }
+            _activeAvatarLayer = idle;
+            _lastAvatarFilename = filename;
+        };
+
+        if (!fade) {
+            whenClipReady(idle, gen, () => {
+                if (gen !== _avatarSwapGen) return;
+                avatarVideoStack.classList.add("avatar-swap-instant");
+                finalize();
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() =>
+                        avatarVideoStack.classList.remove("avatar-swap-instant")
+                    );
+                });
+            });
+            idle.src = path;
+            idle.load();
+            return;
+        }
+
+        whenClipReady(idle, gen, finalize);
+        idle.src = path;
+        idle.load();
+    }
+
+    /**
+     * Відображає бейдж емоції над повідомленням користувача.
+     * Показується лише якщо emotion != neutral і confidence > порогу.
+     * Дані приходять від EmotionEngine (Python backend).
+     */
+    function createUserEmotionBadge(emotionData) {
+        if (!emotionData) return null;
+        const { emotion, confidence } = emotionData;
+        if (emotion === "neutral" || confidence < EMOTION_BADGE_THRESHOLD) return null;
+        const meta = EMOTION_META[emotion] || EMOTION_META.neutral;
+        const badge = document.createElement("div");
+        badge.className = "user-emotion-badge";
+        badge.setAttribute("title", `EmotionEngine: ${emotion} (впевненість ${Math.round(confidence * 100)}%)`);
+        badge.style.cssText = [
+            "display:inline-flex", "align-items:center", "gap:4px",
+            "font-size:11px", `color:${meta.color}`,
+            "opacity:0.75", "margin-bottom:2px",
+            "font-weight:500", "letter-spacing:0.02em",
+            "cursor:default",
+        ].join(";");
+        badge.innerHTML = `<span>${meta.emoji}</span><span>${meta.label}</span>`;
+        return badge;
+    }
     const newChatBtn = document.getElementById("new-chat-btn");
     const avatarBox = document.querySelector('.avatar-fixed');
     const resizeHandle = document.querySelector('.resize-handle');
@@ -229,35 +423,327 @@ window.addEventListener("DOMContentLoaded", async () => {
     window.addEventListener("resize", () => requestAnimationFrame(syncAvatarDefaultBottom));
     const confirmLogout = document.getElementById("confirmLogout");
 
+    /**
+     * Основний кліп на клас (high confidence) — узгоджено з AvatarController у emotion_engine.py.
+     * Усі 12 файлів з avatar/animations/ використовуються на бекенді через high/med/fallback.
+     */
+    const AVATAR_VIDEO_MAP = {
+        neutral:  "muse.mp4",
+        happy:    "excited.mp4",
+        sad:      "sad.mp4",
+        surprise: "surprize1.mp4",
+        thinking: "squinted1.mp4",
+        angry:    "angry.mp4",
+        disgust:  "disgust.mp4",
+        // emoji fallback (старий формат парсингу)
+        "😊": "excited.mp4",
+        "😄": "excited.mp4",
+        "😲": "surprize1.mp4",
+        "🤔": "squinted1.mp4",
+        "😍": "excited.mp4",
+        "😠": "angry.mp4",
+        "🤢": "disgust.mp4",
+    };
+
+    /** Пули з 3 кліпів (high/med/fallback) — як у AvatarController в emotion_engine.py; цикл під час очікування відповіді */
+    const AVATAR_ROTATION_POOLS = {
+        neutral:  ["muse.mp4", "speak_blink.mp4", "speak.mp4"],
+        happy:    ["excited.mp4", "happy.mp4", "happy.mp4"],
+        sad:      ["sad.mp4", "speak.mp4", "muse.mp4"],
+        surprise: ["surprize1.mp4", "fear.mp4", "confused.mp4"],
+        thinking: ["squinted1.mp4", "confused.mp4", "speak_blink.mp4"],
+        angry:    ["angry.mp4", "speak.mp4", "fear.mp4"],
+        disgust:  ["disgust.mp4", "squinted1.mp4", "muse.mp4"],
+    };
+
+    /** Мін. пауза перед «задумливою» ротацією — якщо одразу прийде user_emotion, не показуємо два стани поспіль. */
+    const THINKING_AVATAR_DEBOUNCE_MS = 480;
+
+    /** Покоління ротації: скидається в clearAvatarRotation, щоб старі onEnded не спрацьовували. */
+    let avatarRotationGeneration = 0;
+
+    let thinkingAvatarDebounceId = null;
+
+    function cancelThinkingAvatarDebounce() {
+        if (thinkingAvatarDebounceId != null) {
+            clearTimeout(thinkingAvatarDebounceId);
+            thinkingAvatarDebounceId = null;
+        }
+    }
+
+    /**
+     * Остання виразна емоція користувача за поточне відправлене повідомлення (поки LLM відповідає).
+     * Після `done` промпт часто дає neutral — не скидаємо аватар у muse, доки не нове повідомлення.
+     */
+    let stickyUserAvatarThisTurn = null;
+
+    function clearAvatarRotation() {
+        cancelThinkingAvatarDebounce();
+        avatarRotationGeneration++;
+    }
+
+    /** Скільки різних кліпів у циклі ротації: частіше 1–2, інколи 3. Для thinking — ще більше «одна форма». */
+    function pickRotationPlaylistLength(emotionKey, poolLen) {
+        const r = Math.random();
+        if (emotionKey === "thinking") {
+            if (r < 0.58) return 1;
+            if (r < 0.92) return Math.min(2, poolLen);
+            return Math.min(3, poolLen);
+        }
+        if (r < 0.42) return 1;
+        if (r < 0.78) return Math.min(2, poolLen);
+        return Math.min(3, poolLen);
+    }
+
+    function buildRotationPlaylist(emotionKey, hintFilename) {
+        const key =
+            AVATAR_ROTATION_POOLS[emotionKey] !== undefined
+                ? emotionKey
+                : "neutral";
+        const full = AVATAR_ROTATION_POOLS[key];
+        if (!full || full.length === 0) return { key, playlist: [] };
+        const n = pickRotationPlaylistLength(key, full.length);
+        let start = 0;
+        if (
+            hintFilename &&
+            typeof hintFilename === "string" &&
+            full.includes(hintFilename)
+        ) {
+            start = full.indexOf(hintFilename);
+        }
+        const playlist = [];
+        for (let i = 0; i < n; i++) {
+            playlist.push(full[(start + i) % full.length]);
+        }
+        return { key, playlist };
+    }
+
+    /**
+     * Будує змішаний плейліст з топ-2 емоцій на основі розподілу scores.
+     * Основна емоція отримує 2 кліпи, вторинна (якщо score > 0.14) — 1 кліп.
+     * Повертає { primaryKey, playlist }.
+     *
+     * @param {Object} scores       — розподіл ймовірностей {emotion: float}
+     * @param {string|null} hintFilename — кліп від бекенду (пріоритет у основній емоції)
+     */
+    function buildMultiEmotionPlaylist(scores, hintFilename) {
+        const SECONDARY_THRESHOLD = 0.14;
+
+        // Топ-2 емоції з пулами
+        const candidates = Object.entries(scores || {})
+            .filter(([emo, v]) => v > SECONDARY_THRESHOLD && AVATAR_ROTATION_POOLS[emo])
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 2);
+
+        if (candidates.length === 0) {
+            return { primaryKey: "neutral", playlist: ["muse.mp4"] };
+        }
+
+        const [[primaryKey, primaryScore], secondary] = [candidates[0], candidates[1]];
+        const primaryPool = AVATAR_ROTATION_POOLS[primaryKey] || ["muse.mp4"];
+
+        // Визначаємо старт у основному пулі (підказка від бекенду)
+        let start = 0;
+        if (hintFilename && primaryPool.includes(hintFilename)) {
+            start = primaryPool.indexOf(hintFilename);
+        }
+
+        // Кількість кліпів основної емоції: 1 якщо домінує і є вторинна, інакше 2
+        const primaryCount = secondary && primaryScore < 0.72 ? 2 : Math.min(2, primaryPool.length);
+        const playlist = [];
+        for (let i = 0; i < primaryCount; i++) {
+            playlist.push(primaryPool[(start + i) % primaryPool.length]);
+        }
+
+        // Додаємо 1 кліп вторинної емоції якщо вона достатньо значуща
+        if (secondary) {
+            const [secKey, secScore] = secondary;
+            if (secScore > SECONDARY_THRESHOLD) {
+                const secPool = AVATAR_ROTATION_POOLS[secKey] || [];
+                if (secPool.length > 0) playlist.push(secPool[0]);
+            }
+        }
+
+        return { primaryKey, playlist };
+    }
+
+    /**
+     * Запускає цикл ротації кліпів змішаного плейліста (топ-2 емоції).
+     * Використовується коли є повний розподіл scores від EmotionEngine.
+     *
+     * @param {Object} scores       — розподіл ймовірностей {emotion: float}
+     * @param {string|null} hintFilename — кліп від бекенду
+     */
+    function startMultiEmotionRotation(scores, hintFilename = null) {
+        if (!avatarLayerA || !avatarLayerB) return;
+        clearAvatarRotation();
+        const token = avatarRotationGeneration;
+        const { primaryKey, playlist } = buildMultiEmotionPlaylist(scores, hintFilename);
+        if (!playlist.length) return;
+
+        let i = 0;
+        function step() {
+            if (token !== avatarRotationGeneration) return;
+            const fn = playlist[i % playlist.length];
+            // Емоція для кліпу: визначаємо з якого пулу він походить
+            const clipKey = Object.entries(AVATAR_ROTATION_POOLS).find(
+                ([, pool]) => pool.includes(fn)
+            )?.[0] || primaryKey;
+            applyAvatarTransition(clipKey, fn, {
+                fade: false,
+                playThroughOnce: true,
+                onEnded: () => {
+                    if (token !== avatarRotationGeneration) return;
+                    i = (i + 1) % playlist.length;
+                    step();
+                },
+            });
+        }
+        step();
+    }
+
+    /**
+     * Під час генерації — цикл з 1–3 кліпів; кожен кліп відтворюється повністю (ended), не обрізається таймером.
+     * hintFilename: якщо є (з бекенду), входить у плейлист із відповідного місця в пулі.
+     */
+    function startAvatarRotation(emotionKey, hintFilename = null) {
+        if (!avatarLayerA || !avatarLayerB) return;
+        clearAvatarRotation();
+        const token = avatarRotationGeneration;
+        const { key, playlist } = buildRotationPlaylist(emotionKey, hintFilename);
+        if (!playlist.length) return;
+
+        let i = 0;
+        function step() {
+            if (token !== avatarRotationGeneration) return;
+            const fn = playlist[i % playlist.length];
+            applyAvatarTransition(key, fn, {
+                fade: false,
+                playThroughOnce: true,
+                onEnded: () => {
+                    if (token !== avatarRotationGeneration) return;
+                    i = (i + 1) % playlist.length;
+                    step();
+                },
+            });
+        }
+        step();
+    }
+
+    function scheduleThinkingAvatarRotation() {
+        cancelThinkingAvatarDebounce();
+        thinkingAvatarDebounceId = setTimeout(() => {
+            thinkingAvatarDebounceId = null;
+            startAvatarRotation("thinking");
+        }, THINKING_AVATAR_DEBOUNCE_MS);
+    }
+
+    /**
+     * Застосовує емоцію до аватара.
+     * Якщо event містить user_emotion (від EmotionEngine) — аватар реагує на емоцію КОРИСТУВАЧА.
+     * Якщо є тільки emotion (від LLM) — аватар відображає стан АСИСТЕНТА.
+     *
+     * Пріоритет: user_emotion із done (confidence ≥ порогу) > «липка» емоція цього відправлення
+     * (збережена з SSE user_emotion) > емоція асистента з промпта.
+     */
     function applyAvatarEmotion(data) {
+        clearAvatarRotation();
         if (avatarBox) {
             avatarBox.classList.add("active-glow");
             setTimeout(() => avatarBox.classList.remove("active-glow"), 3000);
         }
-        if (data.emotion && avatarVideo) {
-            const videoMap = {
-                neutral: "speak_blink.mp4",
-                happy: "happy.mp4",
-                sad: "sad.mp4",
-                surprise: "surprize1.mp4",
-                thinking: "squinted1.mp4",
-                "😊": "happy.mp4",
-                "😄": "speak_blink.mp4",
-                "😲": "surprize1.mp4",
-                "🤔": "squinted1.mp4",
-                "😍": "happy.mp4",
-            };
-            const key = String(data.emotion).trim();
-            const filename =
-                videoMap[key] || videoMap[key.toLowerCase()] || "speak_blink.mp4";
-            const sourceElement = avatarVideo.querySelector("source");
-            if (sourceElement && !sourceElement.src.includes(filename)) {
-                sourceElement.src = `/avatar/animations/${filename}`;
-                avatarVideo.load();
-                avatarVideo.play().catch((e) => console.log("Помилка відео:", e));
-                if (emotionLabel) emotionLabel.textContent = data.emotion;
+
+        // Визначаємо, яку емоцію показати на аватарі
+        let displayEmotion = (data.emotion || "neutral").trim().toLowerCase();
+
+        const ue = data.user_emotion;
+        const conf = (x) => Number(x) || 0;
+        const threshold = USER_EMOTION_AVATAR_THRESHOLD - 1e-9;
+        const ueStrong =
+            ue &&
+            ue.emotion &&
+            ue.emotion !== "neutral" &&
+            conf(ue.confidence) >= threshold;
+        const sticky = stickyUserAvatarThisTurn;
+        const stickyStrong =
+            sticky &&
+            sticky.emotion &&
+            sticky.emotion !== "neutral" &&
+            conf(sticky.confidence) >= threshold;
+
+        let filename;
+        let labelEmotion, labelScores, labelConf;
+
+        if (ueStrong) {
+            displayEmotion = ue.emotion;
+            filename =
+                ue.avatar_filename ||
+                AVATAR_VIDEO_MAP[displayEmotion] ||
+                "muse.mp4";
+            labelEmotion = ue.emotion;
+            labelScores   = ue.scores || null;
+            labelConf     = conf(ue.confidence);
+        } else if (stickyStrong) {
+            displayEmotion = sticky.emotion;
+            filename =
+                sticky.avatar_filename ||
+                AVATAR_VIDEO_MAP[displayEmotion] ||
+                "muse.mp4";
+            labelEmotion = sticky.emotion;
+            labelScores   = sticky.scores || null;
+            labelConf     = conf(sticky.confidence);
+        } else {
+            const rawKey = AVATAR_VIDEO_MAP[displayEmotion] ? displayEmotion : "neutral";
+            displayEmotion = rawKey;
+            filename =
+                data.avatar_filename ||
+                AVATAR_VIDEO_MAP[displayEmotion] ||
+                "muse.mp4";
+            labelEmotion = displayEmotion;
+            labelScores   = null;   // від LLM scores немає
+            labelConf     = null;
+        }
+
+        // Плавний перехід або мікс-ротація (через applyAvatarTransition / startMultiEmotionRotation)
+        if (avatarLayerA && avatarLayerB) {
+            if (labelScores && Object.keys(labelScores).length > 0) {
+                // Є повний розподіл — запускаємо мультиемоційну ротацію
+                startMultiEmotionRotation(labelScores, filename);
+            } else {
+                // Лише одна емоція від LLM — простий перехід
+                applyAvatarTransition(displayEmotion, filename);
             }
         }
+
+        renderEmotionLabel(labelEmotion, labelScores, labelConf);
+    }
+
+    /**
+     * Обробляє SSE-подію user_emotion (приходить одразу після status:thinking).
+     * Показує «живу» реакцію аватара ще до відповіді LLM.
+     */
+    function handleUserEmotionEvent(data) {
+        if (!data || !data.emotion) return;
+        cancelThinkingAvatarDebounce();
+        const c = Number(data.confidence) || 0;
+        if (data.emotion === "neutral" || c < USER_EMOTION_AVATAR_THRESHOLD) return;
+        const filename =
+            data.avatar_filename ||
+            AVATAR_VIDEO_MAP[data.emotion] ||
+            "muse.mp4";
+        stickyUserAvatarThisTurn = {
+            emotion: data.emotion,
+            confidence: c,
+            avatar_filename: filename,
+            scores: data.scores || null,    // зберігаємо для topN-лейблу
+        };
+        // Якщо є повний розподіл — мікшуємо кліпи з топ-2 емоцій
+        if (data.scores && Object.keys(data.scores).length > 0) {
+            startMultiEmotionRotation(data.scores, filename);
+        } else {
+            startAvatarRotation(data.emotion, filename);
+        }
+        renderEmotionLabel(data.emotion, data.scores || null, c);
     }
 
     function createThinkingBubble() {
@@ -516,11 +1002,13 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     });
     // Користувач — лише текст; бот — Markdown (історія / привітання / помилки).
-    function appendMessage(role, text) {
+    function appendMessage(role, text, emotionData) {
         const msgDiv = document.createElement("div");
         msgDiv.className = `message ${role === "user" ? "user" : "bot"}`;
         if (role === "user") {
-            msgDiv.textContent = text;
+            const textEl = document.createElement("div");
+            textEl.textContent = text;
+            msgDiv.appendChild(textEl);
         } else {
             const inner = document.createElement("div");
             inner.className = "markdown-body bot-message-body";
@@ -943,13 +1431,18 @@ window.addEventListener("DOMContentLoaded", async () => {
             ? `${textForApi}\n\n📎 ${fileToSend.name}`
             : textRaw;
 
+        // emotionData буде додано після отримання user_emotion event
+        let _pendingUserEmotionData = null;
         flushStreamingMathTimer();
-        appendMessage("user", userBubble);
+        // Тимчасово додаємо повідомлення без бейджу (оновимо після user_emotion)
+        appendMessage("user", userBubble, null);
         userInput.value = "";
         pendingFile = null;
         syncAttachButton();
 
         chatInFlight = true;
+        stickyUserAvatarThisTurn = null;
+        clearAvatarRotation();
         streamAbortController = new AbortController();
         setSendButtonMode("stop");
         if (attachBtn) attachBtn.disabled = true;
@@ -1010,6 +1503,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
             if (!res.ok) {
                 cleanupThinking();
+                clearAvatarRotation();
                 let errMsg = `Помилка сервера (${res.status}). Спробуйте ще раз.`;
                 try {
                     const j = await res.json();
@@ -1032,7 +1526,20 @@ window.addEventListener("DOMContentLoaded", async () => {
 
             await consumeSseStream(res, (ev) => {
                 if (ev.type === "status" && ev.phase === "thinking") {
-                    if (emotionLabel) emotionLabel.textContent = "думає…";
+                    if (emotionLabel) {
+                        const tm = EMOTION_META.thinking;
+                        emotionLabel.dataset.state = "thinking";
+                        emotionLabel.innerHTML = tm
+                            ? `<span style="color:${tm.color};font-weight:600">${tm.emoji}&nbsp;${tm.label}…</span>`
+                            : "думає…";
+                    }
+                    scheduleThinkingAvatarRotation();
+                    return;
+                }
+                // user_emotion — реакція аватара ще до відповіді LLM (від EmotionEngine)
+                if (ev.type === "user_emotion") {
+                    _pendingUserEmotionData = ev;
+                    handleUserEmotionEvent(ev);
                     return;
                 }
                 if (ev.type === "delta" && ev.content) {
@@ -1061,9 +1568,11 @@ window.addEventListener("DOMContentLoaded", async () => {
                         link: ev.link || "",
                         title: ev.title || "",
                     });
+                    clearAvatarRotation();
                     applyAvatarEmotion(ev);
                 }
                 if (ev.type === "error") {
+                    clearAvatarRotation();
                     streamBubble?.remove();
                     cleanupThinking();
                     appendMessage(
@@ -1075,6 +1584,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         } catch (e) {
             streamBubble?.remove();
             cleanupThinking();
+            clearAvatarRotation();
             const aborted =
                 e &&
                 (e.name === "AbortError" ||
@@ -1092,13 +1602,15 @@ window.addEventListener("DOMContentLoaded", async () => {
             }
         } finally {
             chatInFlight = false;
+            clearAvatarRotation();
             streamAbortController = null;
             setSendButtonMode("send");
             if (attachBtn) attachBtn.disabled = false;
             if (voiceBtn) voiceBtn.disabled = false;
             if (userInput) userInput.disabled = false;
-            if (emotionLabel && emotionLabel.textContent === "думає…") {
-                emotionLabel.textContent = "Очікування";
+            if (emotionLabel && emotionLabel.dataset.state === "thinking") {
+                emotionLabel.dataset.state = "idle";
+                emotionLabel.innerHTML = "Очікування";
             }
             requestAnimationFrame(() => syncAvatarDefaultBottom());
         }

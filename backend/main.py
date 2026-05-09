@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(
@@ -12,6 +13,7 @@ logging.basicConfig(
     format="%(levelname)s %(name)s: %(message)s",
 )
 
+from backend.api import routes_emotion
 from backend.api import routes_faq
 from backend.api import routes_feedback
 from backend.api import routes_links
@@ -20,7 +22,14 @@ from backend.api import routes_users
 from backend.db.mongodb import connect_to_mongo, close_mongo_connection
 
 
-load_dotenv()
+# .env не потрапляє в Docker-образ (див. .dockerignore). У контейнері:
+#   docker run --env-file .env …  або  -v /шлях/.env:/app/.env:ro
+# Необов’язково: DOTENV_PATH=/abs/path/.env
+_env_file = os.environ.get("DOTENV_PATH")
+if _env_file:
+    load_dotenv(_env_file)
+else:
+    load_dotenv()
 
 app = FastAPI()
 
@@ -66,6 +75,33 @@ async def serve_faq():
 async def serve_faq():
     return FileResponse(os.path.join("frontend", "pages", "sites.html"), headers=_NO_STORE_HTML)
 
+
+@app.get("/emotion-demo", response_class=FileResponse)
+async def serve_emotion_demo():
+    """Демо-сторінка модуля аналізу емоцій (для захисту диплому)."""
+    return FileResponse(
+        os.path.join("frontend", "pages", "emotion-demo.html"),
+        headers=_NO_STORE_HTML,
+    )
+
+
+@app.get("/reset-password", response_class=FileResponse)
+async def serve_reset_password():
+    return FileResponse(
+        os.path.join("frontend", "pages", "reset-password.html"),
+        headers=_NO_STORE_HTML,
+    )
+
+
+@app.get("/swagger", include_in_schema=False)
+async def custom_swagger_ui():
+    """Окрема сторінка Swagger UI (зручно відкрити як явний endpoint)."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title or '3droxana'} - Swagger UI",
+    )
+
+app.include_router(routes_emotion.router)
 app.include_router(routes_faq.router)
 app.include_router(routes_feedback.router)
 app.include_router(routes_links.router)

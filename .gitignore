@@ -121,3 +121,7 @@ yarn-error.log*
 *.swo
 *.bak
 *.tmp
+
+# ML: у репозиторії — дефолтна assistant_core/models/emotion_model.joblib; інші дампи локально
+*.joblib
+!assistant_core/models/emotion_model.joblib

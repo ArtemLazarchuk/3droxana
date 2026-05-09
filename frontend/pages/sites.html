@@ -6,8 +6,7 @@
     <title>Сайти КПІ | KPI Assistant</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <!-- Оновлена версія стилів -->
-    <link rel="stylesheet" href="/static/css/style.css?v=11">
+    <link rel="stylesheet" href="/static/css/style.css?v=13">
 </head>
 <body data-theme="dark">
 
@@ -64,8 +63,16 @@
                         <button type="button" class="sidebar-account-theme-btn" data-theme-pref="system"><i class="bi bi-display"></i> Системна</button>
                     </div>
                 </div>
-                <button type="button" class="sidebar-account-main-row" id="sidebar-dropdown-logout">
-                    <span class="sidebar-account-main-icon"><i class="bi bi-box-arrow-right"></i></span>
+                <a href="/emotion-demo" class="sidebar-account-main-row" id="sidebar-link-emotion-demo" role="menuitem">
+                    <span class="sidebar-account-main-icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
+                    <span class="sidebar-account-main-label">Демо емоцій</span>
+                </a>
+                <a href="/swagger" target="_blank" rel="noopener noreferrer" class="sidebar-account-main-row" id="sidebar-link-web-api" role="menuitem">
+                    <span class="sidebar-account-main-icon" aria-hidden="true"><i class="bi bi-braces"></i></span>
+                    <span class="sidebar-account-main-label">Відкрити Web API</span>
+                </a>
+                <button type="button" class="sidebar-account-main-row" id="sidebar-dropdown-logout" role="menuitem">
+                    <span class="sidebar-account-main-icon" aria-hidden="true"><i class="bi bi-box-arrow-right"></i></span>
                     <span class="sidebar-account-main-label">Вийти</span>
                 </button>
             </div>
