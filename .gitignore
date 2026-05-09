@@ -122,6 +122,6 @@ yarn-error.log*
 *.bak
 *.tmp
 
-# ML: у репозиторії — дефолтна models/emotion_model.joblib; інші дампи локально
+# ML: у репозиторії — дефолтна assistant_core/models/emotion_model.joblib; інші дампи локально
 *.joblib
-!models/emotion_model.joblib
+!assistant_core/models/emotion_model.joblib
