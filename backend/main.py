@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(
@@ -89,6 +90,15 @@ async def serve_reset_password():
     return FileResponse(
         os.path.join("frontend", "pages", "reset-password.html"),
         headers=_NO_STORE_HTML,
+    )
+
+
+@app.get("/swagger", include_in_schema=False)
+async def custom_swagger_ui():
+    """Окрема сторінка Swagger UI (зручно відкрити як явний endpoint)."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title or '3droxana'} - Swagger UI",
     )
 
 app.include_router(routes_emotion.router)
