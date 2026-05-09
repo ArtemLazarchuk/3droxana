@@ -17,7 +17,6 @@ COPY backend ./backend
 COPY assistant_core ./assistant_core
 COPY frontend ./frontend
 COPY avatar ./avatar
-COPY models ./models
 
 # Port
 EXPOSE 6060
