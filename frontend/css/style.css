@@ -482,7 +482,7 @@ h1, h2, h3, h4, h5, h6, .fw-bold {
   margin-left: auto;
   border-bottom-right-radius: 4px;
   white-space: pre-wrap;
-  color: #fff;
+  color: var(--text-primary); /* Тепер колір буде адаптивним! */
 }
 
 /* Бот ліворуч */
@@ -1265,9 +1265,26 @@ video#avatar-video {
     transform: translateX(0) !important;
   }
 
-  /* Приховуємо аватар на мобільних, щоб він не заважав */
+  /* Повертаємо аватар на мобільних, але робимо його меншим */
   .avatar-fixed {
+    display: flex !important;
+    width: 100px !important;      /* Робимо вужчим */
+    min-width: 100px !important;
+    bottom: 90px !important;      /* Піднімаємо трохи вище поля вводу */
+    right: 15px !important;       /* Притискаємо до правого краю */
+    padding: 6px !important;
+    border-radius: 16px !important;
+  }
+  
+  /* Ховаємо куточок для розтягування, бо на телефоні це незручно */
+  .resize-handle {
     display: none !important;
+  }
+  
+  /* Зменшуємо текст емоцій під аватаром */
+  .emotion-label {
+    font-size: 0.65rem !important;
+    margin-top: 4px !important;
   }
 
   /* Чат на весь екран */
@@ -1276,3 +1293,4 @@ video#avatar-video {
     width: 100% !important;
   }
 }
+
