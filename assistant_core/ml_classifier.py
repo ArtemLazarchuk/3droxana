@@ -50,7 +50,7 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Шлях за замовчуванням, куди зберігається натренована модель
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "emotion_model.joblib"
+DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "models" / "emotion_model.joblib"
 
 
 # ── Опціональні залежності (sklearn) ──────────────────────────────────────────

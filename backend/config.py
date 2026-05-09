@@ -20,3 +20,13 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
 # Якщо застосунок за reverse-proxy і request.base_url дає http://internal — задайте публічний базовий URL без слеша в кінці.
 PUBLIC_APP_BASE_URL = os.environ.get("PUBLIC_APP_BASE_URL", "").strip().rstrip("/")
+
+# Email (Gmail SMTP) для скидання пароля
+MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "").strip()
+MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "").strip()
+MAIL_FROM    = os.environ.get("MAIL_FROM", MAIL_USERNAME).strip()
+MAIL_SERVER  = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+MAIL_PORT    = int(os.environ.get("MAIL_PORT", "587"))
+
+# Час життя токена скидання пароля (хвилини)
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 15

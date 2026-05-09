@@ -83,6 +83,14 @@ async def serve_emotion_demo():
         headers=_NO_STORE_HTML,
     )
 
+
+@app.get("/reset-password", response_class=FileResponse)
+async def serve_reset_password():
+    return FileResponse(
+        os.path.join("frontend", "pages", "reset-password.html"),
+        headers=_NO_STORE_HTML,
+    )
+
 app.include_router(routes_emotion.router)
 app.include_router(routes_faq.router)
 app.include_router(routes_feedback.router)

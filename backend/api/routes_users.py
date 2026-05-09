@@ -1,5 +1,8 @@
 import json
+import smtplib
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -17,6 +20,12 @@ from ..config import (
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
     JWT_ALGORITHM,
     JWT_SECRET_KEY,
+    MAIL_FROM,
+    MAIL_PASSWORD,
+    MAIL_PORT,
+    MAIL_SERVER,
+    MAIL_USERNAME,
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES,
     PUBLIC_APP_BASE_URL,
 )
 from ..db.mongodb import get_database
@@ -323,3 +332,113 @@ async def delete_user(
         raise HTTPException(status_code=403, detail="Можна видаляти лише власний акаунт")
     await user_model.delete_user(db, id)
     return {"message": "User deleted successfully"}
+
+
+# ---------------------------------------------------------------------------
+# Скидання пароля
+# ---------------------------------------------------------------------------
+
+def _send_reset_email(to_email: str, reset_link: str) -> None:
+    """Відправляє HTML-листа зі скиданням пароля через Gmail SMTP."""
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        raise RuntimeError("MAIL_USERNAME / MAIL_PASSWORD не задано у конфігурації")
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Скидання пароля — KPI Assistant"
+    msg["From"] = MAIL_FROM or MAIL_USERNAME
+    msg["To"] = to_email
+
+    text_body = f"Для скидання пароля перейдіть за посиланням:\n{reset_link}\n\nПосилання дійсне 15 хвилин."
+    html_body = f"""<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#0d0d0d;color:#eee;padding:32px;">
+  <div style="max-width:480px;margin:auto;background:#1a1a1a;border-radius:12px;padding:32px;">
+    <h2 style="color:#a78bfa;margin-top:0">Скидання пароля</h2>
+    <p>Ми отримали запит на скидання пароля для вашого акаунта.</p>
+    <p>Натисніть кнопку нижче (посилання дійсне <strong>15 хвилин</strong>):</p>
+    <a href="{reset_link}"
+       style="display:inline-block;margin:16px 0;padding:12px 28px;background:#7c3aed;
+              color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">
+      Скинути пароль
+    </a>
+    <p style="color:#888;font-size:13px;">Якщо ви не надсилали цей запит — просто проігноруйте листа.</p>
+  </div>
+</body>
+</html>"""
+
+    msg.attach(MIMEText(text_body, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as smtp:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
+        smtp.sendmail(msg["From"], [to_email], msg.as_string())
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    body: user_schema.ForgotPasswordRequest,
+    request: Request,
+    db=Depends(get_database),
+):
+    """Ініціює скидання пароля: відправляє лист із посиланням."""
+    user_raw = await user_model.get_user_by_email(db, body.email)
+    # Завжди повертаємо 200, щоб не розкривати чи email зареєстровано
+    if not user_raw:
+        return {"message": "Якщо такий email зареєстровано, лист надіслано."}
+
+    stored_hash = user_raw.get("password")
+    if not stored_hash:
+        # Акаунт через Google OAuth — пароль не задано
+        return {"message": "Якщо такий email зареєстровано, лист надіслано."}
+
+    user = user_model.serialize_user(user_raw)
+    token = jwt.encode(
+        {
+            "purpose": "password_reset",
+            "sub": user["id"],
+            "email": user["email"],
+            "exp": datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES),
+        },
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+    base = _app_base_url(request)
+    reset_link = f"{base}/reset-password?token={token}"
+
+    try:
+        _send_reset_email(body.email, reset_link)
+    except Exception as exc:
+        # Логуємо, але не відкриваємо деталі клієнту
+        print(f"[forgot-password] email error: {exc}")
+        raise HTTPException(status_code=500, detail="Помилка відправки листа. Спробуйте пізніше.")
+
+    return {"message": "Якщо такий email зареєстровано, лист надіслано."}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    body: user_schema.ResetPasswordRequest,
+    db=Depends(get_database),
+):
+    """Перевіряє токен і встановлює новий пароль."""
+    try:
+        payload = jwt.decode(body.token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        if payload.get("purpose") != "password_reset":
+            raise JWTError()
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Посилання недійсне або прострочене.")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Посилання недійсне.")
+
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=422, detail="Пароль має бути не менше 6 символів.")
+
+    new_hash = hash_password(body.new_password)
+    await user_model.update_user(db, user_id, {"password": new_hash})
+    return {"message": "Пароль успішно змінено."}

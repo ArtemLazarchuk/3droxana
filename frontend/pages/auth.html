@@ -171,6 +171,29 @@
             font-size: 0.85em;
             color: #c8c8d4;
         }
+
+        /* --- Забули пароль --- */
+        .forgot-link {
+            display: block;
+            text-align: right;
+            font-size: 0.8rem;
+            color: #888;
+            text-decoration: none;
+            margin-top: 4px;
+            margin-bottom: 2px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .forgot-link:hover { color: var(--accent-color); }
+
+        #forgot-form { display: none; }
+
+        .success-feedback {
+            color: #4ade80;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -210,6 +233,22 @@
         </div>
         <div id="signin-server-err" class="error-feedback" style="display: none;"></div>
         <button type="submit" class="btn btn-auth">Увійти</button>
+        <a class="forgot-link" id="forgot-open-link">Забули пароль?</a>
+    </form>
+
+    <!-- ФОРМА «ЗАБУЛИ ПАРОЛЬ» -->
+    <form id="forgot-form" novalidate>
+        <p style="color:#aaa;font-size:0.85rem;margin-bottom:14px;">
+            Введіть email — надішлемо посилання для скидання пароля.
+        </p>
+        <div class="input-group-container" style="margin-bottom:12px;">
+            <input type="email" class="form-control" id="forgot-email" placeholder="Ваш email" required>
+            <div id="forgot-email-err" class="error-feedback"></div>
+        </div>
+        <div id="forgot-server-err" class="error-feedback" style="display:none;"></div>
+        <div id="forgot-success" class="success-feedback"></div>
+        <button type="submit" class="btn btn-auth" id="forgot-submit-btn">Надіслати посилання</button>
+        <a class="forgot-link" id="forgot-back-link" style="text-align:center;margin-top:10px;">← Назад до входу</a>
     </form>
 
     <div id="google-oauth-below">
@@ -408,6 +447,80 @@
             console.error(err);
         }
     });
+
+    // --- Забули пароль ---
+    const forgotOpenLink   = document.getElementById("forgot-open-link");
+    const forgotBackLink   = document.getElementById("forgot-back-link");
+    const forgotForm       = document.getElementById("forgot-form");
+    const forgotSubmitBtn  = document.getElementById("forgot-submit-btn");
+    const forgotSuccess    = document.getElementById("forgot-success");
+
+    function showForgotView() {
+        signInForm.classList.add("d-none");
+        forgotForm.style.display = "block";
+        const googleBelow = document.getElementById("google-oauth-below");
+        if (googleBelow) googleBelow.classList.add("d-none");
+        title.textContent = "Скидання пароля";
+        toggleText.style.display = "none";
+        clearErrors();
+        forgotSuccess.style.display = "none";
+        forgotSuccess.textContent = "";
+    }
+
+    function hideForgotView() {
+        forgotForm.style.display = "none";
+        signInForm.classList.remove("d-none");
+        const googleBelow = document.getElementById("google-oauth-below");
+        if (googleBelow) googleBelow.classList.remove("d-none");
+        title.textContent = "Вхід";
+        toggleText.style.display = "";
+        clearErrors();
+    }
+
+    if (forgotOpenLink) forgotOpenLink.addEventListener("click", (e) => { e.preventDefault(); showForgotView(); });
+    if (forgotBackLink) forgotBackLink.addEventListener("click", (e) => { e.preventDefault(); hideForgotView(); });
+
+    if (forgotForm) {
+        forgotForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            clearErrors();
+            forgotSuccess.style.display = "none";
+            const emailVal = document.getElementById("forgot-email").value.trim();
+            if (!emailVal) {
+                showError("forgot-email", "forgot-email-err", "Введіть email");
+                return;
+            }
+            forgotSubmitBtn.disabled = true;
+            forgotSubmitBtn.textContent = "Надсилання…";
+            try {
+                const resp = await fetch("/api/users/forgot-password", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: emailVal }),
+                });
+                let data = {};
+                try { data = await resp.json(); } catch (_) {}
+                if (resp.ok) {
+                    forgotSuccess.textContent = data.message || "Якщо такий email зареєстровано, лист надіслано.";
+                    forgotSuccess.style.display = "block";
+                    document.getElementById("forgot-email").value = "";
+                    forgotSubmitBtn.style.display = "none";
+                } else {
+                    const errEl = document.getElementById("forgot-server-err");
+                    errEl.textContent = (data && data.detail) ? detailToString(data.detail) : "Помилка. Спробуйте пізніше.";
+                    errEl.style.display = "block";
+                    forgotSubmitBtn.disabled = false;
+                    forgotSubmitBtn.textContent = "Надіслати посилання";
+                }
+            } catch (_) {
+                const errEl = document.getElementById("forgot-server-err");
+                errEl.textContent = "Немає зв'язку з сервером.";
+                errEl.style.display = "block";
+                forgotSubmitBtn.disabled = false;
+                forgotSubmitBtn.textContent = "Надіслати посилання";
+            }
+        });
+    }
 
     signUpForm.addEventListener("submit", async (e) => {
         e.preventDefault();
