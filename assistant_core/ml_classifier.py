@@ -185,40 +185,40 @@ class EmotionMLClassifier:
             raise RuntimeError("scikit-learn не встановлено. Запустіть: pip install scikit-learn joblib")
 
         word_vec = TfidfVectorizer(
-            analyzer="word",
-            ngram_range=(1, 2),
-            min_df=1,
-            max_df=0.95,
-            sublinear_tf=True,
-            lowercase=True,
+            analyzer="word",  # ознаки з токенів-слів (пробіл як межа)
+            ngram_range=(1, 2),  # уніграми + біграми слів
+            min_df=1,  # слово/н-грама входить у словник, якщо є хоча б у 1 документі
+            max_df=0.95,  # відсікати дуже «загальні» терміни (є >95% документів)
+            sublinear_tf=True,  # TF як log(1+count), щоб довгі тексти не домінували
+            lowercase=True,  # привести текст до нижнього регістру перед лічильником
         )
         char_vec = TfidfVectorizer(
-            analyzer="char_wb",
-            ngram_range=(3, 5),
-            min_df=1,
-            max_df=0.95,
-            sublinear_tf=True,
-            lowercase=True,
+            analyzer="char_wb",  # символьні n-грами в межах слова (краще для флексії)
+            ngram_range=(3, 5),  # шматки з 3–5 символів
+            min_df=1,  # той самий поріг рідкості, що й для word
+            max_df=0.95,  # той самий відсікання загальних n-грам
+            sublinear_tf=True,  # той самий згладжений TF
+            lowercase=True,  # нижній регістр перед підрахунком символів
         )
         features = FeatureUnion(
             [
-                ("word_tfidf", word_vec),
-                ("char_tfidf", char_vec),
+                ("word_tfidf", word_vec),  # гілка: словесні TF-IDF ознаки
+                ("char_tfidf", char_vec),  # гілка: символьні TF-IDF ознаки
             ]
         )
         # `liblinear` — найстабільніший solver для маленьких текстових датасетів
         # на macOS (lbfgs у деяких збірках OpenBLAS падає на FeatureUnion з
         # char_wb-фічами). Для бінарного / one-vs-rest працює відмінно.
         clf = LogisticRegression(
-            solver="liblinear",
-            max_iter=2000,
-            C=1.0,
-            class_weight="balanced",
+            solver="liblinear",  # алгоритм оптимізації ваг (стійкий для цього пайплайна)
+            max_iter=2000,  # максимум ітерацій навчання; збільшено на випадок повільної збіжності
+            C=1.0,  # сила L2-регуляризації: менше C → сильніший штраф на великі ваги
+            class_weight="balanced",  # зважити класи зворотно до їх частоти в train
         )
         pipeline = Pipeline(
             [
-                ("features", features),
-                ("clf", clf),
+                ("features", features),  # крок 1: текст → вектор ознак
+                ("clf", clf),  # крок 2: вектор → ймовірності класів (LogReg)
             ]
         )
         return pipeline
