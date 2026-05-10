@@ -986,12 +986,41 @@ window.addEventListener("DOMContentLoaded", async () => {
     // --- 2. ВИХІД ---
     confirmLogout?.addEventListener("click", () => { localStorage.clear(); window.location.href = "/"; });
 
-    // --- 3. ЗГОРТАННЯ МЕНЮ ---
-    toggleBtn?.addEventListener("click", () => {
-        sidebar.classList.toggle("collapsed");
-        mainContent.classList.toggle("expanded");
+    // --- 3. ЗГОРТАННЯ МЕНЮ ----
+    // --- 3. ОНОВЛЕНЕ ЗГОРТАННЯ МЕНЮ ДЛЯ ВСІХ ПРИСТРОЇВ ---
+    toggleBtn?.addEventListener("click", (e) => {
+        e.stopPropagation(); // Зупиняємо подію, щоб меню не закрилося миттєво
+        
+        if (window.innerWidth <= 768) {
+            // ЛОГІКА ДЛЯ ТЕЛЕФОНІВ (виїжджає поверх)
+            sidebar.classList.toggle("show");
+            
+            // Про всяк випадок прибираємо десктопні класи
+            sidebar.classList.remove("collapsed");
+            mainContent.classList.remove("expanded");
+        } else {
+            // ЛОГІКА ДЛЯ КОМП'ЮТЕРІВ (зсуває контент)
+            sidebar.classList.toggle("collapsed");
+            mainContent.classList.toggle("expanded");
+            
+            // Прибираємо мобільний клас
+            sidebar.classList.remove("show");
+        }
     });
 
+    // Закриття меню при кліку на область чату (тільки для телефонів)
+    mainContent?.addEventListener("click", () => {
+        if (window.innerWidth <= 768 && sidebar.classList.contains("show")) {
+            sidebar.classList.remove("show");
+        }
+    });
+
+    // Додатково: приховувати меню при зміні розміру вікна
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 768) {
+            sidebar.classList.remove("show");
+        }
+    });
     // Користувач — лише текст; бот — Markdown (історія / привітання / помилки).
     function appendMessage(role, text, emotionData) {
         const msgDiv = document.createElement("div");

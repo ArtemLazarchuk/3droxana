@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Чат | KPI Assistant</title>
-    <!-- ЗАХИСТ -->
+    <!-- ЗАХИСТ: Перевірка авторизації -->
     <script>
         (function() { if (!localStorage.getItem("user")) window.location.href = "/auth"; })();
     </script>
@@ -17,75 +17,55 @@
 </head>
 <body data-theme="dark">
 
+<!-- 1. САЙДБАР (УНІФІКОВАНИЙ) -->
 <nav class="sidebar" id="sidebar">
     <div class="p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-2">
             <i class="bi bi-robot fs-4" style="color: var(--accent-color);"></i>
-            <span class="fw-bold">KPI Helper</span>
+            <span class="fw-bold">KPI Assistant</span>
         </div>
     </div>
     <div class="px-3">
-        <button id="new-chat-btn" class="btn btn-new-chat w-100 text-start btn-sm mb-3"><i class="bi bi-plus-lg me-2"></i> Новий чат</button>
+        <!-- Оновлена уніфікована кнопка Новий чат -->
+        <button id="new-chat-btn" class="btn btn-new-chat w-100 mb-3">
+            <i class="bi bi-plus-lg"></i> <span>Новий чат</span>
+        </button>
+        
         <div class="d-flex flex-column">
             <a href="/chat" class="nav-link-custom active"><i class="bi bi-chat-dots"></i> <span>Чат</span></a>
             <a href="/sites" class="nav-link-custom"><i class="bi bi-globe"></i> <span>Сайти КПІ</span></a>
             <a href="/history" class="nav-link-custom"><i class="bi bi-clock-history"></i> <span>Історія</span></a>
         </div>
     </div>
+
+    <!-- Блок профілю внизу сайдбару -->
     <div class="sidebar-footer mt-auto">
         <div class="sidebar-account-wrap" id="sidebar-account-wrap">
-            <button
-                type="button"
-                class="sidebar-account-btn"
-                id="sidebar-account-btn"
-                aria-expanded="false"
-                aria-haspopup="true"
-                aria-controls="sidebar-account-dropdown"
-            >
+            <button type="button" class="sidebar-account-btn" id="sidebar-account-btn" aria-expanded="false" aria-haspopup="true">
                 <span class="sidebar-account-avatar-wrap">
-                    <img
-                        id="sidebar-user-photo"
-                        class="sidebar-user-photo"
-                        alt=""
-                        width="40"
-                        height="40"
-                        hidden
-                        decoding="async"
-                        referrerpolicy="no-referrer"
-                    >
-                    <span id="sidebar-user-avatar" class="sidebar-user-avatar" aria-hidden="true">?</span>
+                    <img id="sidebar-user-photo" class="sidebar-user-photo" alt="" width="40" height="40" hidden>
+                    <span id="sidebar-user-avatar" class="sidebar-user-avatar">?</span>
                 </span>
                 <span class="sidebar-account-text">
                     <span class="sidebar-user-name" id="sidebar-user-name">—</span>
                     <span class="sidebar-user-email" id="sidebar-user-email">—</span>
                 </span>
-                <i class="bi bi-chevron-up sidebar-account-chevron" aria-hidden="true"></i>
+                <i class="bi bi-chevron-up sidebar-account-chevron"></i>
             </button>
-            <div id="sidebar-account-dropdown" class="sidebar-account-dropdown" role="menu" hidden>
+            
+            <!-- Випадаюче меню профілю -->
+            <div id="sidebar-account-dropdown" class="sidebar-account-dropdown" hidden>
                 <div class="sidebar-account-theme-slot" id="sidebar-theme-slot">
-                    <button
-                        type="button"
-                        class="sidebar-account-main-row"
-                        id="sidebar-theme-menu-trigger"
-                        aria-expanded="false"
-                        aria-haspopup="true"
-                        aria-controls="sidebar-theme-flyout"
-                    >
-                        <span class="sidebar-account-main-icon" aria-hidden="true"><i class="bi bi-circle-half"></i></span>
+                    <button type="button" class="sidebar-account-main-row" id="sidebar-theme-menu-trigger">
+                        <span class="sidebar-account-main-icon"><i class="bi bi-circle-half"></i></span>
                         <span class="sidebar-account-main-label">Тема</span>
-                        <i class="bi bi-chevron-right sidebar-account-main-chevron" aria-hidden="true"></i>
+                        <i class="bi bi-chevron-right sidebar-account-main-chevron"></i>
                     </button>
-                    <div id="sidebar-theme-flyout" class="sidebar-account-theme-flyout" role="menu" hidden>
+                    <div id="sidebar-theme-flyout" class="sidebar-account-theme-flyout" hidden>
                         <div class="sidebar-account-dropdown-heading">Тема</div>
-                        <button type="button" class="sidebar-account-theme-btn" role="menuitem" data-theme-pref="light">
-                            <i class="bi bi-sun-fill" aria-hidden="true"></i> Світла
-                        </button>
-                        <button type="button" class="sidebar-account-theme-btn" role="menuitem" data-theme-pref="dark">
-                            <i class="bi bi-moon-stars-fill" aria-hidden="true"></i> Темна
-                        </button>
-                        <button type="button" class="sidebar-account-theme-btn" role="menuitem" data-theme-pref="system">
-                            <i class="bi bi-display" aria-hidden="true"></i> Як у системі
-                        </button>
+                        <button type="button" class="sidebar-account-theme-btn" data-theme-pref="light"><i class="bi bi-sun-fill"></i> Світла</button>
+                        <button type="button" class="sidebar-account-theme-btn" data-theme-pref="dark"><i class="bi bi-moon-stars-fill"></i> Темна</button>
+                        <button type="button" class="sidebar-account-theme-btn" data-theme-pref="system"><i class="bi bi-display"></i> Системна</button>
                     </div>
                 </div>
                 <a href="/emotion-demo" class="sidebar-account-main-row" id="sidebar-link-emotion-demo" role="menuitem">
@@ -105,38 +85,43 @@
     </div>
 </nav>
 
+<!-- 2. ОСНОВНА ОБЛАСТЬ ЧАТУ -->
 <main class="chat-area" id="main-content">
-    <header class="d-flex align-items-center p-3 border-bottom border-secondary" style="height: 60px; background-color: var(--sidebar-bg);">
-        <button id="sidebar-toggle" class="btn text-secondary me-3"><i class="bi bi-layout-sidebar"></i></button>
-        <span class="fw-bold">Чат з асистентом</span>
-    </header>
+    <!-- Уніфікований хедер -->
+    <header class="content-header">
+    <button id="sidebar-toggle" class="btn text-secondary me-3"><i class="bi bi-layout-sidebar"></i></button>
+    <span class="fw-bold header-title">Чат з асистентом</span>
+</header>
     
-    <div class="messages-container flex-grow-1" id="messages"></div>
+    <!-- Контейнер повідомлень -->
+    <div class="messages-container" id="messages"></div>
 
+    <!-- Область введення -->
     <div class="input-area">
+        <!-- Панель прикріпленого файлу -->
         <div id="pending-file-bar" class="pending-file-bar" hidden>
-            <span class="pending-file-bar-icon" aria-hidden="true"><i class="bi bi-paperclip"></i></span>
+            <span class="pending-file-bar-icon"><i class="bi bi-paperclip"></i></span>
             <div class="pending-file-bar-main">
                 <span class="pending-file-bar-label">Файл додано</span>
                 <strong id="pending-file-name" class="pending-file-bar-name"></strong>
             </div>
-            <button type="button" class="pending-file-remove" id="pending-file-remove" title="Прибрати файл" aria-label="Прибрати вкладення"><i class="bi bi-x-lg"></i></button>
+            <button type="button" class="pending-file-remove" id="pending-file-remove"><i class="bi bi-x-lg"></i></button>
         </div>
+
         <div class="position-relative d-flex gap-2 align-items-stretch">
-            <input type="file" id="file-input" class="d-none" accept=".pdf,application/pdf,image/png,image/jpeg,image/jpg,image/webp,image/gif">
-            <input type="text" class="form-control custom-input" id="user-input"
-                data-placeholder-normal="Напишіть повідомлення…"
-                data-placeholder-with-file="Промпт до файлу (необов’язково)…"
-                placeholder="Напишіть повідомлення…" autocomplete="off" lang="uk">
-            <button type="button" class="btn-attach" id="attach-btn" title="Додати PDF або зображення" aria-label="Вкладення"><i class="bi bi-paperclip"></i></button>
-            <button type="button" class="btn-voice" id="voice-btn" title="Голос (браузер): клік — слухати, ще раз — зупинити й надіслати" aria-label="Голосове введення" aria-pressed="false"><i class="bi bi-mic-fill"></i></button>
-            <button type="button" class="btn-send" id="send-btn" title="Надіслати" aria-label="Надіслати повідомлення"><i class="bi bi-send-fill"></i></button>
+            <input type="file" id="file-input" class="d-none" accept=".pdf,image/*">
+            <input type="text" class="form-control custom-input" id="user-input" 
+                   placeholder="Напишіть повідомлення…" autocomplete="off" lang="uk">
+            
+            <button type="button" class="btn-attach" id="attach-btn" title="Додати файл"><i class="bi bi-paperclip"></i></button>
+            <button type="button" class="btn-voice" id="voice-btn" title="Голосове введення"><i class="bi bi-mic-fill"></i></button>
+            <button type="button" class="btn-send" id="send-btn" title="Надіслати"><i class="bi bi-send-fill"></i></button>
         </div>
     </div>
 </main>
 
-<!-- d-lg-block: аватар лише при ширині вікна ≥992px; на вузькому екрані блок прихований -->
-<div class="avatar-fixed d-none d-lg-block">
+<!-- 3. АВАТАР (ДЛЯ ВЕЛИКИХ ЕКРАНІВ) -->
+<div class="avatar-fixed">
     <div id="avatar-video-stack" class="avatar-video-stack">
         <video id="avatar-video-a" class="avatar-video-layer is-active" autoplay muted loop playsinline src="/avatar/animations/muse.mp4"></video>
         <video id="avatar-video-b" class="avatar-video-layer" muted loop playsinline></video>
@@ -145,19 +130,24 @@
     <div class="resize-handle"></div>
 </div>
 
+<!-- 4. МОДАЛЬНЕ ВІКНО ВИХОДУ -->
 <div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header border-secondary"><h5>Вихід</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-header">
+          <h5 class="fw-bold m-0">Вихід</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
       <div class="modal-body">Ви впевнені, що хочете вийти з акаунту?</div>
-      <div class="modal-footer border-secondary">
+      <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
-        <button type="button" class="btn btn-danger" id="confirmLogout">Вийти</button>
+        <button type="button" class="btn btn-danger px-4" id="confirmLogout">Вийти</button>
       </div>
     </div>
   </div>
 </div>
 
+<!-- СКРИПТИ -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
