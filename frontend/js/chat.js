@@ -643,8 +643,10 @@ window.addEventListener("DOMContentLoaded", async () => {
      * Якщо event містить user_emotion (від EmotionEngine) — аватар реагує на емоцію КОРИСТУВАЧА.
      * Якщо є тільки emotion (від LLM) — аватар відображає стан АСИСТЕНТА.
      *
-     * Пріоритет: user_emotion із done (confidence ≥ порогу) > «липка» емоція цього відправлення
-     * (збережена з SSE user_emotion) > емоція асистента з промпта.
+     * Пріоритет для кліпу аватара: user_emotion із done (confidence ≥ порогу) > «липка» емоція
+     * цього відправлення (SSE user_emotion) > емоція асистента з промпта.
+     * Лейбл «Стан»: якщо в done є user_emotion — завжди показуємо його scores/confidence (відсотки),
+     * навіть коли для відео обрано емоцію асистента (поріг не застосовується до цифр у підписі).
      */
     function applyAvatarEmotion(data) {
         clearAvatarRotation();
@@ -704,14 +706,27 @@ window.addEventListener("DOMContentLoaded", async () => {
             labelConf     = null;
         }
 
-        // Плавний перехід або мікс-ротація (через applyAvatarTransition / startMultiEmotionRotation)
+        // Підпис під аватаром: завжди з цифрами з аналізу користувача, якщо done їх передав.
+        if (ue && ue.emotion != null && String(ue.emotion).trim() !== "") {
+            labelEmotion = String(ue.emotion).trim().toLowerCase();
+            labelScores =
+                ue.scores && typeof ue.scores === "object" && Object.keys(ue.scores).length > 0
+                    ? ue.scores
+                    : null;
+            labelConf = conf(ue.confidence);
+        }
+
+        // Плавний перехід або ротація після відповіді
         if (avatarLayerA && avatarLayerB) {
             if (labelScores && Object.keys(labelScores).length > 0) {
-                // Є повний розподіл — запускаємо мультиемоційну ротацію
+                // Є повний розподіл від EmotionEngine — мікс-ротація з топ-2 емоцій
                 startMultiEmotionRotation(labelScores, filename);
+            } else if (displayEmotion === "neutral") {
+                // LLM відповів нейтрально — легка ротація neutral-кліпів (muse, speak_blink, speak)
+                startAvatarRotation("neutral", filename);
             } else {
-                // Лише одна емоція від LLM — простий перехід
-                applyAvatarTransition(displayEmotion, filename);
+                // Виразна емоція від LLM — ротація пулу цієї емоції
+                startAvatarRotation(displayEmotion, filename);
             }
         }
 
@@ -726,7 +741,13 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (!data || !data.emotion) return;
         cancelThinkingAvatarDebounce();
         const c = Number(data.confidence) || 0;
+
+        // Лейбл «Стан» оновлюємо завжди — щоб після аналізу одразу зникало «задумливо»
+        renderEmotionLabel(data.emotion, data.scores || null, c);
+
+        // Відео аватара і «липкий» стан — лише якщо емоція виразна
         if (data.emotion === "neutral" || c < USER_EMOTION_AVATAR_THRESHOLD) return;
+
         const filename =
             data.avatar_filename ||
             AVATAR_VIDEO_MAP[data.emotion] ||
@@ -735,7 +756,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             emotion: data.emotion,
             confidence: c,
             avatar_filename: filename,
-            scores: data.scores || null,    // зберігаємо для topN-лейблу
+            scores: data.scores || null,
         };
         // Якщо є повний розподіл — мікшуємо кліпи з топ-2 емоцій
         if (data.scores && Object.keys(data.scores).length > 0) {
@@ -743,7 +764,6 @@ window.addEventListener("DOMContentLoaded", async () => {
         } else {
             startAvatarRotation(data.emotion, filename);
         }
-        renderEmotionLabel(data.emotion, data.scores || null, c);
     }
 
     function createThinkingBubble() {
