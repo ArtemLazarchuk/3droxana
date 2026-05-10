@@ -645,8 +645,8 @@ window.addEventListener("DOMContentLoaded", async () => {
      *
      * Пріоритет для кліпу аватара: user_emotion із done (confidence ≥ порогу) > «липка» емоція
      * цього відправлення (SSE user_emotion) > емоція асистента з промпта.
-     * Лейбл «Стан»: якщо в done є user_emotion — завжди показуємо його scores/confidence (відсотки),
-     * навіть коли для відео обрано емоцію асистента (поріг не застосовується до цифр у підписі).
+     * Фаза 2 (після відповіді): аватар і лейбл показують емоцію АСИСТЕНТА.
+     * Фаза 1 (одразу після надсилання) — handleUserEmotionEvent: показує емоцію КОРИСТУВАЧА.
      */
     function applyAvatarEmotion(data) {
         clearAvatarRotation();
@@ -655,82 +655,21 @@ window.addEventListener("DOMContentLoaded", async () => {
             setTimeout(() => avatarBox.classList.remove("active-glow"), 3000);
         }
 
-        // Визначаємо, яку емоцію показати на аватарі
-        let displayEmotion = (data.emotion || "neutral").trim().toLowerCase();
+        // Емоція асистента з відповіді LLM
+        const assistantEmotion = (data.emotion || "neutral").trim().toLowerCase();
+        const emotionKey = AVATAR_VIDEO_MAP[assistantEmotion] ? assistantEmotion : "neutral";
+        const filename =
+            data.avatar_filename ||
+            AVATAR_VIDEO_MAP[emotionKey] ||
+            "muse.mp4";
 
-        const ue = data.user_emotion;
-        const conf = (x) => Number(x) || 0;
-        const threshold = USER_EMOTION_AVATAR_THRESHOLD - 1e-9;
-        const ueStrong =
-            ue &&
-            ue.emotion &&
-            ue.emotion !== "neutral" &&
-            conf(ue.confidence) >= threshold;
-        const sticky = stickyUserAvatarThisTurn;
-        const stickyStrong =
-            sticky &&
-            sticky.emotion &&
-            sticky.emotion !== "neutral" &&
-            conf(sticky.confidence) >= threshold;
-
-        let filename;
-        let labelEmotion, labelScores, labelConf;
-
-        if (ueStrong) {
-            displayEmotion = ue.emotion;
-            filename =
-                ue.avatar_filename ||
-                AVATAR_VIDEO_MAP[displayEmotion] ||
-                "muse.mp4";
-            labelEmotion = ue.emotion;
-            labelScores   = ue.scores || null;
-            labelConf     = conf(ue.confidence);
-        } else if (stickyStrong) {
-            displayEmotion = sticky.emotion;
-            filename =
-                sticky.avatar_filename ||
-                AVATAR_VIDEO_MAP[displayEmotion] ||
-                "muse.mp4";
-            labelEmotion = sticky.emotion;
-            labelScores   = sticky.scores || null;
-            labelConf     = conf(sticky.confidence);
-        } else {
-            const rawKey = AVATAR_VIDEO_MAP[displayEmotion] ? displayEmotion : "neutral";
-            displayEmotion = rawKey;
-            filename =
-                data.avatar_filename ||
-                AVATAR_VIDEO_MAP[displayEmotion] ||
-                "muse.mp4";
-            labelEmotion = displayEmotion;
-            labelScores   = null;   // від LLM scores немає
-            labelConf     = null;
-        }
-
-        // Підпис під аватаром: завжди з цифрами з аналізу користувача, якщо done їх передав.
-        if (ue && ue.emotion != null && String(ue.emotion).trim() !== "") {
-            labelEmotion = String(ue.emotion).trim().toLowerCase();
-            labelScores =
-                ue.scores && typeof ue.scores === "object" && Object.keys(ue.scores).length > 0
-                    ? ue.scores
-                    : null;
-            labelConf = conf(ue.confidence);
-        }
-
-        // Плавний перехід або ротація після відповіді
+        // Відео: ротація пулу емоції асистента
         if (avatarLayerA && avatarLayerB) {
-            if (labelScores && Object.keys(labelScores).length > 0) {
-                // Є повний розподіл від EmotionEngine — мікс-ротація з топ-2 емоцій
-                startMultiEmotionRotation(labelScores, filename);
-            } else if (displayEmotion === "neutral") {
-                // LLM відповів нейтрально — легка ротація neutral-кліпів (muse, speak_blink, speak)
-                startAvatarRotation("neutral", filename);
-            } else {
-                // Виразна емоція від LLM — ротація пулу цієї емоції
-                startAvatarRotation(displayEmotion, filename);
-            }
+            startAvatarRotation(emotionKey, filename);
         }
 
-        renderEmotionLabel(labelEmotion, labelScores, labelConf);
+        // Лейбл: показуємо емоцію асистента (без відсотків — LLM їх не дає)
+        renderEmotionLabel(emotionKey, null, null);
     }
 
     /**
