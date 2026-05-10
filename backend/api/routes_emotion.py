@@ -26,10 +26,9 @@ from pydantic import BaseModel, Field
 
 from assistant_core.emotion_engine import (
     EMOTION_LIST,
-    analyze_emotion,
     get_avatar_controller,
+    get_demo_classifier,
     get_engine_status,
-    reset_session_context,
 )
 
 router = APIRouter(prefix="/api/emotion", tags=["Emotion Engine"])
@@ -150,10 +149,11 @@ async def analyze_text_emotion(req: EmotionAnalyzeRequest) -> EmotionAnalyzeResp
         "Ого, я не очікував такого!"    → surprise (≈ 0.80)
         "Цікаво, як це працює?"         → thinking (≈ 0.65)
     """
-    if req.reset_context:
-        reset_session_context()
+    demo_clf = get_demo_classifier()
+    # Демо завжди скидає контекст — кожен запит незалежний, результат детермінований
+    demo_clf.reset_context()
 
-    result = analyze_emotion(req.text)
+    result = demo_clf.analyze(req.text)
     animation = get_avatar_controller().select_animation(
         result,
         demo_responsive=req.demo_responsive_avatar,
@@ -178,7 +178,9 @@ async def get_animation_for_text(req: AnimationOnlyRequest) -> AnimationOnlyResp
     Швидкий ендпоінт: повертає тільки рекомендовану анімацію для аватара.
     Зручно для клієнтів, яким не потрібні деталі (наприклад, ігровий двигун).
     """
-    result = analyze_emotion(req.text)
+    demo_clf = get_demo_classifier()
+    demo_clf.reset_context()
+    result = demo_clf.analyze(req.text)
     anim = get_avatar_controller().select_animation(result)
     return AnimationOnlyResponse(
         emotion=result.emotion,
@@ -197,13 +199,14 @@ async def analyze_batch(req: EmotionBatchRequest) -> dict:
     if not req.texts:
         raise HTTPException(status_code=400, detail="Порожній список текстів")
 
-    if req.reset_context:
-        reset_session_context()
+    demo_clf = get_demo_classifier()
+    demo_clf.reset_context()
 
     results = []
     controller = get_avatar_controller()
     for text in req.texts:
-        result = analyze_emotion(text)
+        demo_clf.reset_context()
+        result = demo_clf.analyze(text)
         anim = controller.select_animation(result)
         results.append(
             {
@@ -290,8 +293,7 @@ async def get_emotion_health() -> EmotionHealthResponse:
 @router.post("/reset")
 async def reset_emotion_context() -> dict:
     """
-    Скидає контекстну пам'ять EmotionClassifier.
-    Викликати при початку нової сесії чату.
+    Скидає контекстну пам'ять демо-класифікатора.
     """
-    reset_session_context()
+    get_demo_classifier().reset_context()
     return {"status": "ok", "message": "Контекстну пам'ять скинуто"}

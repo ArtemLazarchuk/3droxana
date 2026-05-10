@@ -1535,15 +1535,24 @@ class AvatarController:
 # ══════════════════════════════════════════════════════════════════════════════
 
 _classifier: Optional[EmotionClassifier] = None
+_demo_classifier: Optional[EmotionClassifier] = None
 _avatar_controller: Optional[AvatarController] = None
 
 
 def get_classifier() -> EmotionClassifier:
-    """Повертає або створює singleton EmotionClassifier."""
+    """Повертає або створює singleton EmotionClassifier для чату."""
     global _classifier
     if _classifier is None:
         _classifier = EmotionClassifier()
     return _classifier
+
+
+def get_demo_classifier() -> EmotionClassifier:
+    """Окремий singleton для демо-сторінки з власним ContextWindow, ізольованим від чату."""
+    global _demo_classifier
+    if _demo_classifier is None:
+        _demo_classifier = EmotionClassifier()
+    return _demo_classifier
 
 
 def get_avatar_controller() -> AvatarController:

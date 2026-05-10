@@ -364,17 +364,26 @@ async def stream_chat_events(
                 parsed["link"],
                 parsed["title"],
             )
+            # Аналізуємо емоцію ВІДПОВІДІ асистента через той самий EmotionEngine
+            assistant_emotion_result = analyze_emotion(parsed["response"])
+            assistant_emotion_data = {
+                "emotion":    assistant_emotion_result.emotion,
+                "confidence": round(assistant_emotion_result.confidence, 4),
+                "scores":     {k: round(v, 4) for k, v in assistant_emotion_result.scores.items()},
+                "method":     assistant_emotion_result.method,
+                "avatar_filename": get_avatar_controller().select_animation(
+                    assistant_emotion_result
+                ).filename,
+            }
             yield _sse_event(
                 {
                     "type": "done",
                     "response": parsed["response"],
                     "link": parsed["link"],
-                    "emotion": parsed["emotion"],           # емоція АСИСТЕНТА (від LLM)
+                    "emotion": parsed["emotion"],
                     "title": parsed["title"],
-                    "user_emotion": user_emotion_data,      # емоція КОРИСТУВАЧА (від EmotionEngine)
-                    "avatar_filename": select_animation_for_emotion_label(
-                        parsed["emotion"]
-                    ).filename,
+                    "user_emotion": user_emotion_data,
+                    "assistant_emotion": assistant_emotion_data,
                 }
             )
             return
@@ -424,7 +433,6 @@ async def process_chat(
         assistant_title=parsed["title"],
     )
 
-    # Додаємо user_emotion до результату
     parsed["user_emotion"] = {
         "emotion":    user_emotion_result.emotion,
         "confidence": round(user_emotion_result.confidence, 4),
@@ -432,6 +440,18 @@ async def process_chat(
         "method":     user_emotion_result.method,
         "avatar_filename": get_avatar_controller().select_animation(
             user_emotion_result
+        ).filename,
+    }
+
+    # Аналізуємо емоцію ВІДПОВІДІ асистента через EmotionEngine
+    assistant_emotion_result = analyze_emotion(parsed["response"])
+    parsed["assistant_emotion"] = {
+        "emotion":    assistant_emotion_result.emotion,
+        "confidence": round(assistant_emotion_result.confidence, 4),
+        "scores":     {k: round(v, 4) for k, v in assistant_emotion_result.scores.items()},
+        "method":     assistant_emotion_result.method,
+        "avatar_filename": get_avatar_controller().select_animation(
+            assistant_emotion_result
         ).filename,
     }
 
