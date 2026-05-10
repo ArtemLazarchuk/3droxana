@@ -77,13 +77,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--test-size",
         type=float,
-        default=0.2,
+        default=0.25,
         help="Частка тестової вибірки (0.1–0.5). За замовчуванням 0.2.",
     )
     p.add_argument(
         "--seed",
         type=int,
-        default=42,
+        default=66,
         help="Random seed для відтворюваності. За замовчуванням 42.",
     )
     p.add_argument(
