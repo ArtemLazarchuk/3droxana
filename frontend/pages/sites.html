@@ -82,18 +82,15 @@
 
 <!-- 2. ОСНОВНИЙ КОНТЕНТ -->
 <main class="sites-container-fixed" id="main-content">
+    <!-- УНІФІКОВАНИЙ ХЕДЕР ЯК У ЧАТІ -->
     <header class="content-header">
-        <button id="sidebar-toggle" class="btn text-secondary me-3">
-            <i class="bi bi-layout-sidebar"></i>
-        </button>
-        <!-- Текст звідси прибрано для чистоти інтерфейсу -->
+        <button id="sidebar-toggle" class="btn text-secondary me-3"><i class="bi bi-layout-sidebar"></i></button>
+        <span class="fw-bold header-title fs-4">Корисні ресурси</span>
     </header>
     
     <div class="scroll-content">
-        <!-- Змінено заголовок тут -->
-        <h1 class="fw-bold mb-5">Корисні ресурси</h1>
-        
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="sitesGrid">
+        <!-- Вміст: Картки -->
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 pt-4" id="sitesGrid">
             <!-- Картки завантажуються динамічно -->
         </div>
     </div>

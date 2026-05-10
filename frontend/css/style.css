@@ -1336,5 +1336,52 @@ a.sidebar-account-main-row:focus-visible {
     margin-left: 0 !important;
     width: 100% !important;
   }
+  /* =========================================
+     Адаптація повідомлень та карток (фікс розриву тексту)
+     ========================================= */
+  
+  /* 1. Робимо повідомлення значно ширшими на мобільному */
+  .message {
+    max-width: 92% !important; /* Займаємо майже всю ширину */
+    padding: 12px 16px !important; /* Трохи менші відступи для економії місця */
+  }
+
+  /* 2. Картка посилання: робимо компактнішою */
+  .message.bot a.bot-message-link-card {
+    padding: 10px !important;
+    gap: 10px !important;
+  }
+
+  /* Зменшуємо іконку всередині картки */
+  .message.bot .bot-message-link-icon-cell {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 1rem !important;
+  }
+
+  /* 3. Головний фікс: забороняємо розрив слів по одній літері */
+  .message.bot .bot-message-link-headline {
+    font-size: 0.95rem !important;
+    word-break: normal !important;      /* Скасовуємо жорсткий розрив */
+    overflow-wrap: break-word !important; /* Переносимо тільки якщо слово цілком не влазить */
+    hyphens: auto; /* Додаємо дефіси за правилами української мови, якщо слово дуже довге */
+  }
+
+  /* Трохи зменшуємо додаткові тексти в картці */
+  .message.bot .bot-message-link-kicker {
+    font-size: 0.6rem !important;
+  }
+  .message.bot .bot-message-link-url-line {
+    font-size: 0.75rem !important;
+  }
+  /* =========================================
+     Фікс: Модальні вікна поверх мобільного меню
+     ========================================= */
+  .modal {
+      z-index: 10050 !important;
+  }
+  .modal-backdrop {
+      z-index: 10040 !important;
+  }
 }
 
