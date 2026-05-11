@@ -223,13 +223,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // ── Emotion Engine: мап емоцій → emoji + назва (синхронізовано з emotion_engine.py) ──
     const EMOTION_META = {
-        happy:    { emoji: "😊", label: "радісно",    color: "#f5a623" },
-        sad:      { emoji: "😔", label: "сумно",      color: "#7b9dc8" },
-        surprise: { emoji: "😲", label: "здивовано",  color: "#a855f7" },
-        thinking: { emoji: "🤔", label: "задумливо", color: "#10b981" },
-        neutral:  { emoji: "😐", label: "нейтрально", color: "#6b7280" },
-        angry:    { emoji: "😠", label: "злісно",     color: "#ef4444" },
-        disgust:  { emoji: "🤢", label: "огида",      color: "#84cc16" },
+        happy:    { emoji: "😊", label: "радість",     color: "#f5a623" },
+        sad:      { emoji: "😔", label: "смуток",      color: "#7b9dc8" },
+        surprise: { emoji: "😲", label: "здивування",  color: "#a855f7" },
+        thinking: { emoji: "🤔", label: "роздуми",     color: "#10b981" },
+        neutral:  { emoji: "😐", label: "нейтрально",  color: "#6b7280" },
+        angry:    { emoji: "😠", label: "злість",      color: "#ef4444" },
+        disgust:  { emoji: "🤢", label: "огида",       color: "#84cc16" },
     };
 
     // Порог впевненості для показу бейджу на повідомленні

@@ -330,7 +330,7 @@ async def stream_chat_events(
         "method":      user_emotion_result.method,
         "tokens":      user_emotion_result.tokens_matched[:10],  # топ-10 для дебагу
         "avatar_filename": get_avatar_controller().select_animation(
-            user_emotion_result
+            user_emotion_result, demo_responsive=True
         ).filename,
     }
 
@@ -372,7 +372,7 @@ async def stream_chat_events(
                 "scores":     {k: round(v, 4) for k, v in assistant_emotion_result.scores.items()},
                 "method":     assistant_emotion_result.method,
                 "avatar_filename": get_avatar_controller().select_animation(
-                    assistant_emotion_result
+                    assistant_emotion_result, demo_responsive=True
                 ).filename,
             }
             yield _sse_event(
@@ -439,7 +439,7 @@ async def process_chat(
         "scores":     {k: round(v, 4) for k, v in user_emotion_result.scores.items()},
         "method":     user_emotion_result.method,
         "avatar_filename": get_avatar_controller().select_animation(
-            user_emotion_result
+            user_emotion_result, demo_responsive=True
         ).filename,
     }
 
@@ -451,7 +451,7 @@ async def process_chat(
         "scores":     {k: round(v, 4) for k, v in assistant_emotion_result.scores.items()},
         "method":     assistant_emotion_result.method,
         "avatar_filename": get_avatar_controller().select_animation(
-            assistant_emotion_result
+            assistant_emotion_result, demo_responsive=True
         ).filename,
     }
 
