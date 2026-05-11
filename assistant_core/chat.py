@@ -15,8 +15,6 @@ from assistant_core.link_indexing import build_rag_context
 from assistant_core.emotion_engine import (
     analyze_emotion,
     get_avatar_controller,
-    reset_session_context,
-    select_animation_for_emotion_label,
 )
 
 
